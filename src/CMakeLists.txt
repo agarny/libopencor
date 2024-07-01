@@ -124,6 +124,10 @@ set(API_HEADER_FILES
 set(GIT_API_MODULE_FILE ${CMAKE_CURRENT_SOURCE_DIR}/api/${CMAKE_PROJECT_NAME_LC}/module/${CMAKE_PROJECT_NAME_LC})
 set(API_MODULE_FILE ${GIT_API_MODULE_FILE})
 
+set(EXTERNAL_SOURCE_FILES #---ISAN---
+    ${CMAKE_CURRENT_SOURCE_DIR}/../extern/simdjson/simdjson.cpp
+)
+
 set(INTERNAL_SOURCE_FILES
     ${CMAKE_CURRENT_SOURCE_DIR}/file/filemanager.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/misc/utils.cpp
@@ -200,8 +204,13 @@ set(GIT_SOURCE_FILES
 )
 
 set(SOURCE_FILES
+    ${EXTERNAL_SOURCE_FILES} #---ISAN---
     ${GIT_API_SOURCE_FILES}
     ${INTERNAL_SOURCE_FILES}
+)
+
+set(EXTERNAL_HEADER_FILES #
+    ${CMAKE_CURRENT_SOURCE_DIR}/../extern/simdjson/simdjson.h
 )
 
 set(INTERNAL_HEADER_FILES
@@ -241,11 +250,13 @@ set(GIT_HEADER_FILES
 )
 
 set(HEADER_FILES
+    ${EXTERNAL_HEADER_FILES} #---ISAN---
     ${INTERNAL_HEADER_FILES}
     ${VERSION_HEADER_FILE}
 )
 
-include_directories(file
+include_directories(../extern/simdjson #---ISAN---
+                    file
                     logger
                     misc
                     solver

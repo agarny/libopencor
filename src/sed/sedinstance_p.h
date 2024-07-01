@@ -31,7 +31,10 @@ public:
 
     explicit Impl(const SedDocumentPtr &pDocument, bool pCompiled);
 
+    /*---ISAN---
     void run();
+    */
+    void run(const std::string &pInitialConditions = {}); //---ISAN---
 
     SedInstanceTaskPtrs tasks() const;
 };

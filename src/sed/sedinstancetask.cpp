@@ -25,6 +25,8 @@ limitations under the License.
 
 #include "utils.h"
 
+#include "simdjson.h" //---ISAN---
+
 #include "libopencor/sedsimulation.h"
 #include "libopencor/sedsteadystate.h"
 
@@ -153,7 +155,64 @@ void SedInstanceTask::Impl::trackResults(size_t pIndex)
     }
 }
 
-void SedInstanceTask::Impl::initialise()
+namespace {
+
+std::string name(const libcellml::VariablePtr &pVariable, char pSeparator = '.') //---ISAN---
+{
+    auto component = std::dynamic_pointer_cast<libcellml::Component>(pVariable->parent());
+
+    return component->name() + pSeparator + pVariable->name();
+}
+
+} // namespace
+
+void SedInstanceTask::Impl::applyInitialConditions(const std::string &pInitialConditions) //---ISAN---
+{
+    //---GRY--- THIS IS A TEMPORARY METHOD TO HELP US WITH OUR MVP FOR ISAN. EVENTUALLY, WE WILL WANT TO DO THIS IN A
+    //          PURELY SED-ML WAY. (THIS MEANS THAT WE MAY END UP HAVING TO REMOVE SIMDJSON.)
+
+    if (pInitialConditions.empty()) {
+        return;
+    }
+
+    simdjson::padded_string data(pInitialConditions);
+    simdjson::dom::parser parser;
+    auto doc = parser.parse(data);
+
+    if (doc.is_object()) {
+        auto object = doc.get_object();
+
+        if (object.size() > 0) {
+            for (const auto &[key, value] : object) {
+                if (value.is_double()) {
+                    bool initialConditionSet = false;
+
+                    for (const auto &state : mAnalyserModel->states()) {
+                        if (name(state->variable(), '/') == key) {
+                            mStates[state->index()] = value.get<double>();
+
+                            initialConditionSet = true;
+
+                            break;
+                        }
+                    }
+
+                    if (!initialConditionSet) {
+                        for (const auto &variable : mAnalyserModel->variables()) {
+                            if (name(variable->variable(), '/') == key) {
+                                mVariables[variable->index()] = value.get<double>();
+
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+void SedInstanceTask::Impl::initialise(const std::string &pInitialConditions)
 {
     // Initialise our model, which means that for an ODE/DAE model we need to initialise our states, rates, and
     // variables, compute computed constants, rates, and variables, while for an algebraic/NLA model we need to
@@ -177,6 +236,9 @@ void SedInstanceTask::Impl::initialise()
         } else {
 #endif
             mRuntime->initialiseInterpretedVariablesForDifferentialModel()(mStates, mRates, mVariables);
+
+            applyInitialConditions(pInitialConditions); //---ISAN---
+
             mRuntime->computeInterpretedComputedConstants()(mVariables);
             mRuntime->computeInterpretedRates()(mVoi, mStates, mRates, mVariables);
             mRuntime->computeInterpretedVariablesForDifferentialModel()(mVoi, mStates, mRates, mVariables);
@@ -216,12 +278,18 @@ void SedInstanceTask::Impl::initialise()
 #endif
 }
 
+/*---ISAN---
 void SedInstanceTask::Impl::run()
+*/
+void SedInstanceTask::Impl::run(const std::string &pInitialConditions) //---ISAN---
 {
     // (Re)initialise our model.
     // Note: reinitialise our model in case we are running our model multiple times.
 
+    /*---ISAN---
     initialise();
+    */
+    initialise(pInitialConditions); //---ISAN---
 
     // Compute our model, unless it's an algebraic/NLA model in which case we are already done.
 
@@ -319,6 +387,7 @@ Doubles SedInstanceTask::Impl::variable(size_t pIndex) const
     return mResults.variables[pIndex];
 }
 
+/*---ISAN---
 namespace {
 
 std::string name(const libcellml::VariablePtr &pVariable)
@@ -329,6 +398,7 @@ std::string name(const libcellml::VariablePtr &pVariable)
 }
 
 } // namespace
+*/
 
 Doubles SedInstanceTask::Impl::voi() const
 {

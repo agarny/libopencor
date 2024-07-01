@@ -49,7 +49,11 @@ public:
      * Run all the tasks associated with this instance.
      */
 
+#ifdef __EMSCRIPTEN__
+    void run(const std::string &pInitialConditions); //---ISAN---
+#else
     void run();
+#endif
 
     /**
      * @brief Return the tasks.

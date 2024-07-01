@@ -73,13 +73,19 @@ SedInstance::Impl::Impl(const SedDocumentPtr &pDocument, bool pCompiled)
     }
 }
 
+/*---ISAN---
 void SedInstance::Impl::run()
+*/
+void SedInstance::Impl::run(const std::string &pInitialConditions) //---ISAN---
 {
     // Run all the tasks associated with this instance unless they have some issues.
 
     for (const auto &task : mTasks) {
         if (!task->hasIssues()) {
+            /*---ISAN---
             task->pimpl()->run();
+            */
+            task->pimpl()->run(pInitialConditions); //---ISAN---
 
             if (task->hasIssues()) {
                 addIssues(task);
@@ -113,10 +119,17 @@ const SedInstance::Impl *SedInstance::pimpl() const
     return reinterpret_cast<const Impl *>(Logger::pimpl());
 }
 
+#ifdef __EMSCRIPTEN__
+void SedInstance::run(const std::string &pInitialConditions) //---ISAN---
+{
+    pimpl()->run(pInitialConditions);
+}
+#else
 void SedInstance::run()
 {
     pimpl()->run();
 }
+#endif
 
 SedInstanceTaskPtrs SedInstance::tasks() const
 {

@@ -62,8 +62,14 @@ public:
 
     void trackResults(size_t pIndex);
 
+    void applyInitialConditions(const std::string &pInitialConditions); //---ISAN---
+
+    /*---ISAN---
     void initialise();
     void run();
+    */
+    void initialise(const std::string &pInitialConditions = {}); //---ISAN---
+    void run(const std::string &pInitialConditions); //---ISAN---
 
     Doubles state(size_t pIndex) const;
     Doubles rate(size_t pIndex) const;

@@ -64,7 +64,13 @@ void sedApi()
 
     emscripten::class_<libOpenCOR::SedInstance, emscripten::base<libOpenCOR::Logger>>("SedInstance")
         .smart_ptr<libOpenCOR::SedInstancePtr>("SedInstance")
+        /*---ISAN---
         .function("run", &libOpenCOR::SedInstance::run)
+        */
+        //---ISAN---
+        .function("run", emscripten::optional_override([](libOpenCOR::SedInstancePtr &pThis, uintptr_t pInitialConditions, size_t pSize) {
+                      pThis->run(std::string(reinterpret_cast<const char *>(pInitialConditions), pSize));
+                  }))
         .function("tasks", &libOpenCOR::SedInstance::tasks);
 
     // SedInstanceTask API.
