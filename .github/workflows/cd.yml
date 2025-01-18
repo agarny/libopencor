@@ -1,6 +1,8 @@
 name: CD
 
 on:
+  pull_request:
+    branches: [ main ]
   push:
     branches: [ main ]
   release:
@@ -38,13 +40,11 @@ jobs:
             os: ubuntu-22.04
             shared_libs: ON
           - name: 'Linux static library (ARM)'
-            os: ubuntu-22.04
-            arch: arm
+            os: ubuntu-22.04-arm
             shared_libs: OFF
             context: CC=aarch64-linux-gnu-gcc CXX=aarch64-linux-gnu-g++
           - name: 'Linux shared library (ARM)'
-            os: ubuntu-22.04
-            arch: arm
+            os: ubuntu-22.04-arm
             shared_libs: ON
             context: CC=aarch64-linux-gnu-gcc CXX=aarch64-linux-gnu-g++
           - name: 'macOS static library (Intel)'
@@ -69,11 +69,6 @@ jobs:
     steps:
       - name: Check out libOpenCOR
         uses: actions/checkout@v4
-      - name: Install ARM compiler
-        if: ${{ matrix.arch == 'arm' }}
-        run: |
-          sudo apt update
-          sudo apt install gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
       - name: Install CMake and Ninja
         uses: lukka/get-cmake@latest
       - name: Install buildcache
