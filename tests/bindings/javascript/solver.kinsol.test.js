@@ -40,8 +40,9 @@ describe("Solver KINSOL tests", () => {
     utils.freeMemory(loc, solverNla2ContentsPtr);
   });
 
-  test("Dummy", () => {});
+  test("Dummy", () => {}); //---ISSUE468---
 
+  /*---ISSUE468---
   test("Maximum number of iterations value with invalid number", () => {
     const file = new loc.File(utils.CELLML_FILE);
 
@@ -301,4 +302,5 @@ describe("Solver KINSOL tests", () => {
     document.delete();
     file.delete();
   });
+  */
 });

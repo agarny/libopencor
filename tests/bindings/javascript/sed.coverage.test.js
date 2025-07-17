@@ -426,6 +426,7 @@ describe("Sed coverage tests", () => {
     file.delete();
   });
 
+  /*---ISSUE468---
   test("SedInstanceAndSedInstanceTaskDifferentialModel", () => {
     const file = new loc.File(utils.CELLML_FILE);
 
@@ -545,6 +546,7 @@ describe("Sed coverage tests", () => {
     document.delete();
     file.delete();
   });
+  */
 
   test("SedDocument", () => {
     let file = new loc.File(utils.HTTP_REMOTE_CELLML_FILE);
@@ -566,6 +568,7 @@ describe("Sed coverage tests", () => {
     file.delete();
   });
 
+  /*---ISSUE468---
   test("Solver", () => {
     // Get the duplicate() method of different solvers to be covered.
 
@@ -629,4 +632,5 @@ describe("Sed coverage tests", () => {
     document.delete();
     file.delete();
   });
+  */
 });

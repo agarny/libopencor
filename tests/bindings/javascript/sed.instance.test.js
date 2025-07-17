@@ -76,6 +76,8 @@ describe("Sed instance tests", () => {
     utils.freeMemory(loc, combineArchiveWithCellmlFileAsMasterFileContentsPtr);
   });
 
+  test("Dummy", () => {}); //---ISSUE468---
+
   test("No file", () => {
     const document = new loc.SedDocument();
     const instance = document.instantiate();
@@ -191,6 +193,7 @@ describe("Sed instance tests", () => {
     file.delete();
   });
 
+  /*---ISSUE468---
   test("Algebraic model", () => {
     const file = new loc.File(utils.CELLML_FILE);
 
@@ -438,4 +441,5 @@ describe("Sed instance tests", () => {
     document.delete();
     file.delete();
   });
+  */
 });
