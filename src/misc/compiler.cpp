@@ -27,8 +27,16 @@ limitations under the License.
 #include "clangend.h"
 
 #include "llvmbegin.h"
+#include "llvm/IR/LegacyPassManager.h"
+#include "llvm/MC/TargetRegistry.h"
+#include "llvm/Support/CodeGen.h"
+#include "llvm/Support/FileSystem.h"
 #include "llvm/Support/Host.h"
+#include "llvm/Support/raw_ostream.h"
 #include "llvm/Support/TargetSelect.h"
+#include "llvm/Target/TargetMachine.h"
+#include "llvm/Target/TargetOptions.h"
+#include "llvm/ADT/SmallVector.h"
 #include "llvm-c/Core.h"
 #include "llvmend.h"
 
@@ -55,11 +63,17 @@ std::string llvmClangError(llvm::Error pError)
 
 } // namespace
 
+#ifdef __EMSCRIPTEN__
+bool Compiler::Impl::compile(const std::string &pCode, std::string &pWasmModule)
+#else
 bool Compiler::Impl::compile(const std::string &pCode)
+#endif
 {
     // Reset ourselves.
 
+#ifndef __EMSCRIPTEN__
     mLljit.reset(nullptr);
+#endif
 
     removeAllIssues();
 
@@ -83,7 +97,15 @@ bool Compiler::Impl::compile(const std::string &pCode)
     // Get a compilation object to which we pass some arguments.
 
     static constexpr auto DUMMY_FILE_NAME = "dummy.c";
-    static const std::vector<const char *> COMPILATION_ARGUMENTS = {"clang", "-fsyntax-only",
+    static const std::vector<const char *> COMPILATION_ARGUMENTS = {"clang",
+#ifdef __EMSCRIPTEN__
+                                                                    "-nostdlib",
+                                                                    "-Wl,--no-entry",
+                                                                    "-Wl,--export-all",
+                                                                    "-Wl,--allow-undefined",
+#else
+                                                                    "-fsyntax-only",
+#endif
                                                                     "-O3",
                                                                     "-fno-math-errno",
                                                                     "-fno-stack-protector",
@@ -99,16 +121,28 @@ bool Compiler::Impl::compile(const std::string &pCode)
     }
 #endif
 
-    // The compilation object should have one command, so if it doesn't then something went wrong.
+    // Make sure that our compilation object has the right number of commands.
 
-    clang::driver::JobList &jobs = compilation->getJobs();
-
+    auto &jobs = compilation->getJobs();
 #ifndef CODE_COVERAGE_ENABLED
-    if ((jobs.size() != 1) || !llvm::isa<clang::driver::Command>(*jobs.begin())) {
+    auto firstJob = jobs.begin();
+
+#    ifdef __EMSCRIPTEN__
+    if ((jobs.size() != 2)
+        || !llvm::isa<clang::driver::Command>(*firstJob)
+        || !llvm::isa<clang::driver::Command>(*(firstJob+1))) {
+        addError("The compilation object must have two commands.");
+
+        return false;
+    }
+#    else
+    if ((jobs.size() != 1)
+        || !llvm::isa<clang::driver::Command>(*firstJob)) {
         addError("The compilation object must have one command.");
 
         return false;
     }
+#    endif
 #endif
 
     // Retrieve the command and make sure that its name is "clang".
@@ -208,7 +242,7 @@ extern double atanh(double);
     compilerInstance.getInvocation().getPreprocessorOpts().addRemappedFile(DUMMY_FILE_NAME,
                                                                            llvm::MemoryBuffer::getMemBuffer(code).release());
 
-    // Compile the given code, resulting in an LLVM bitcode module.
+    // Compile the given code to LLVM IR.
 
     std::unique_ptr<clang::CodeGenAction> codeGenAction(new clang::EmitLLVMOnlyAction {llvm::unwrap(LLVMGetGlobalContext())});
 
@@ -262,13 +296,13 @@ extern double atanh(double);
         return false;
     }
 
-    // Retrieve the LLVM bitcode module.
+    // Retrieve the LLVM module.
 
     auto module = codeGenAction->takeModule();
 
 #ifndef CODE_COVERAGE_ENABLED
     if (module == nullptr) {
-        addError("The LLVM bitcode module could not be retrieved.");
+        addError("The LLVM module could not be retrieved.");
 
         return false;
     }
@@ -280,17 +314,67 @@ extern double atanh(double);
     llvm::InitializeNativeTarget();
     llvm::InitializeNativeTargetAsmPrinter();
 
+#ifdef __EMSCRIPTEN__
+    // Get the WebAssembly target.
+
+    std::string error;
+    const auto *target = llvm::TargetRegistry::lookupTarget("wasm32", error);
+
+#    ifndef CODE_COVERAGE_ENABLED
+    if (!target) {
+        addError("The WebAssembly target could not be found: " + error);
+
+        return false;
+    }
+#    endif
+
+    // Create the target machine.
+
+    llvm::TargetOptions options;
+    std::unique_ptr<llvm::TargetMachine> targetMachine(
+        target->createTargetMachine("wasm32-unknown-wasi", "", "", options,
+                                    llvm::Reloc::PIC_, llvm::CodeModel::Small));
+
+#    ifndef CODE_COVERAGE_ENABLED
+    if (!targetMachine) {
+        addError("The WebAssembly target machine could not be created.");
+
+        return false;
+    }
+#    endif
+
+    // Set the data layout.
+
+    module->setDataLayout(targetMachine->createDataLayout());
+
+    // Compile to WebAssembly object code.
+
+    llvm::SmallVector<char, 0> wasmBuffer;
+    llvm::raw_svector_ostream wasmStream(wasmBuffer);
+    llvm::legacy::PassManager passManager;
+
+    if (targetMachine->addPassesToEmitFile(passManager, wasmStream, nullptr,
+                                           llvm::CodeGenFileType::CGFT_ObjectFile)) {
+        addError("Could not add passes to emit WebAssembly object file.");
+
+        return false;
+    }
+
+    passManager.run(*module);
+
+    pWasmModule = std::string(wasmBuffer.begin(), wasmBuffer.end());
+#else
     // Create an ORC-based JIT and keep track of it.
 
     auto lljit = llvm::orc::LLJITBuilder().create();
 
-#ifndef CODE_COVERAGE_ENABLED
+#    ifndef CODE_COVERAGE_ENABLED
     if (!lljit) {
         addError(std::string("An ORC-based JIT could not be created").append(llvmClangError(lljit.takeError())).append("."));
 
         return false;
     }
-#endif
+#    endif
 
     mLljit = std::move(*lljit);
 
@@ -298,13 +382,13 @@ extern double atanh(double);
 
     auto dynamicLibrarySearchGenerator = llvm::orc::DynamicLibrarySearchGenerator::GetForCurrentProcess(mLljit->getDataLayout().getGlobalPrefix());
 
-#ifndef CODE_COVERAGE_ENABLED
+#    ifndef CODE_COVERAGE_ENABLED
     if (!dynamicLibrarySearchGenerator) {
         addError(std::string("The dynamic library search generator could not be created").append(llvmClangError(dynamicLibrarySearchGenerator.takeError())).append("."));
 
         return false;
     }
-#endif
+#    endif
 
     mLljit->getMainJITDylib().addGenerator(std::move(*dynamicLibrarySearchGenerator));
 
@@ -313,22 +397,24 @@ extern double atanh(double);
     auto llvmContext = std::make_unique<llvm::LLVMContext>();
     auto threadSafeModule = llvm::orc::ThreadSafeModule(std::move(module), std::move(llvmContext));
 
-#ifdef CODE_COVERAGE_ENABLED
+#    ifdef CODE_COVERAGE_ENABLED
     const bool res =
-#else
+#    else
     res =
-#endif
+#    endif
         !mLljit->addIRModule(std::move(threadSafeModule));
 
-#ifndef CODE_COVERAGE_ENABLED
+#    ifndef CODE_COVERAGE_ENABLED
     if (!res) {
         addError("The LLVM bitcode module could not be added to the ORC-based JIT.");
     }
+#    endif
 #endif
 
     return res;
 }
 
+#ifndef __EMSCRIPTEN__
 bool Compiler::Impl::addFunction(const std::string &pName, void *pFunction)
 {
     // Add the given function to our ORC-based JIT. Note that we assume that we have a valid ORC-based JIT, function
@@ -338,11 +424,11 @@ bool Compiler::Impl::addFunction(const std::string &pName, void *pFunction)
         {mLljit->mangleAndIntern(pName), llvm::JITEvaluatedSymbol(llvm::pointerToJITTargetAddress(pFunction), llvm::JITSymbolFlags::Exported)},
     }));
 
-#ifndef CODE_COVERAGE_ENABLED
+#    ifndef CODE_COVERAGE_ENABLED
     if (!res) {
         addError(std::string("The ").append(pName).append("() function could not be added to the compiler."));
     }
-#endif
+#    endif
 
     return res;
 }
@@ -360,6 +446,7 @@ void *Compiler::Impl::function(const std::string &pName) const
 
     return {};
 }
+#endif
 
 Compiler::Compiler()
     : Logger(new Impl {})
@@ -386,6 +473,12 @@ CompilerPtr Compiler::create()
     return CompilerPtr {new Compiler {}};
 }
 
+#ifdef __EMSCRIPTEN__
+bool Compiler::compile(const std::string &pCode, std::string &pWasmModule)
+{
+    return pimpl()->compile(pCode, pWasmModule);
+}
+#else
 bool Compiler::compile(const std::string &pCode)
 {
     return pimpl()->compile(pCode);
@@ -400,5 +493,6 @@ void *Compiler::function(const std::string &pName) const
 {
     return pimpl()->function(pName);
 }
+#endif
 
 } // namespace libOpenCOR

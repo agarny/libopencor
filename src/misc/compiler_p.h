@@ -31,11 +31,15 @@ class Compiler::Impl: public Logger::Impl
 public:
     std::unique_ptr<llvm::orc::LLJIT> mLljit;
 
+#ifdef __EMSCRIPTEN__
+    bool compile(const std::string &pCode, std::string &pWasmModule);
+#else
     bool compile(const std::string &pCode);
 
     bool addFunction(const std::string &pName, void *pFunction);
 
     void *function(const std::string &pName) const;
+#endif
 };
 
 } // namespace libOpenCOR
