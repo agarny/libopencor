@@ -79,11 +79,21 @@ CellmlFileRuntime::Impl::Impl(const CellmlFilePtr &pCellmlFile, const SolverNlaP
         generator->setModel(pCellmlFile->analyserModel());
         generator->setProfile(generatorProfile);
 
-#ifndef __EMSCRIPTEN__
         // Compile the generated code.
 
         mCompiler = Compiler::create();
 
+#ifdef __EMSCRIPTEN__
+        std::string wasmModule;
+
+        if (!mCompiler->compile(generator->implementationCode(), wasmModule)) {
+            // The compilation failed, so add the issues it generated.
+
+            addIssues(mCompiler);
+
+            return;
+        }
+#else
 #    ifdef CODE_COVERAGE_ENABLED
         mCompiler->compile(generator->implementationCode());
 #    else
@@ -95,9 +105,11 @@ CellmlFileRuntime::Impl::Impl(const CellmlFilePtr &pCellmlFile, const SolverNlaP
             return;
         }
 #    endif
+#endif
 
         // Make sure that our compiler knows about nlaSolve(), if needed.
 
+#ifndef __EMSCRIPTEN__
         if ((cellmlFileType == libcellml::AnalyserModel::Type::NLA)
             || (cellmlFileType == libcellml::AnalyserModel::Type::DAE)) {
 #    ifndef CODE_COVERAGE_ENABLED
@@ -113,9 +125,11 @@ CellmlFileRuntime::Impl::Impl(const CellmlFilePtr &pCellmlFile, const SolverNlaP
             }
 #    endif
         }
+#endif
 
         // Retrieve our algebraic/differential functions and make sure that we managed to retrieve them.
 
+#ifndef __EMSCRIPTEN__
         if (differentialModel) {
             mInitialiseVariablesForDifferentialModel = reinterpret_cast<InitialiseVariablesForDifferentialModel>(mCompiler->function("initialiseVariables"));
             mComputeComputedConstants = reinterpret_cast<ComputeComputedConstants>(mCompiler->function("computeComputedConstants"));

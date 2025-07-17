@@ -26,9 +26,7 @@ namespace libOpenCOR {
 class CellmlFileRuntime::Impl: public Logger::Impl
 {
 public:
-#ifndef __EMSCRIPTEN__
     CompilerPtr mCompiler = nullptr;
-#endif
 
     char *mNlaSolverAddress = nullptr;
 
