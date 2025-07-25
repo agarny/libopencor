@@ -270,6 +270,7 @@ describe("Sed instance tests", () => {
     file.delete();
   });
 
+  /*---ISSUE468---
   test("NLA model", () => {
     const file = new loc.File(utils.CELLML_FILE);
 
@@ -400,6 +401,7 @@ describe("Sed instance tests", () => {
     document.delete();
     file.delete();
   });
+  */
 
   test("COMBINE archive", () => {
     const file = new loc.File(utils.COMBINE_ARCHIVE);

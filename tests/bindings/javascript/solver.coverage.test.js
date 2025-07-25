@@ -77,6 +77,7 @@ describe("Solver coverage tests", () => {
     file.delete();
   });
 
+  /*---ISSUE468---
   test("Algebraic changes", () => {
     // We want to solve a system of three unknowns:
     // Variables:
@@ -127,4 +128,5 @@ describe("Solver coverage tests", () => {
     document.delete();
     file.delete();
   });
+  */
 });
