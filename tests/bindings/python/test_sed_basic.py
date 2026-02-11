@@ -49,6 +49,13 @@ def test_cellml_file():
     assert document.has_issues == False
 
 
+def test_big_cellml_file():
+    file = loc.File(utils.resource_path("api/sed/big.cellml"))
+    document = loc.SedDocument(file)
+
+    assert document.has_issues == False
+
+
 def test_sedml_file():
     file = loc.File(utils.resource_path(utils.Sedml2File))
     document = loc.SedDocument(file)

@@ -46,6 +46,7 @@ export const UNKNOWN_CONTENTS = stringToArrayBuffer('Some unknown contents...');
 export const CELLML_CONTENTS = stringToArrayBuffer(`@CELLML_CONTENTS@`);
 export const ERROR_CELLML_CONTENTS = stringToArrayBuffer(`@ERROR_CELLML_CONTENTS@`);
 export const WARNING_CELLML_CONTENTS = stringToArrayBuffer(`@WARNING_CELLML_CONTENTS@`);
+export const BIG_CELLML_CONTENTS = stringToArrayBuffer(`@BIG_CELLML_CONTENTS@`);
 export const SEDML_CONTENTS = stringToArrayBuffer(`@SEDML_CONTENTS@`);
 export const SEDML_WITH_ABSOLUTE_CELLML_FILE_CONTENTS = stringToArrayBuffer(
   `@SEDML_WITH_ABSOLUTE_CELLML_FILE_CONTENTS@`

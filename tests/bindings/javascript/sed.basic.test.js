@@ -56,6 +56,16 @@ test.describe('Sed basic tests', () => {
     assert.strictEqual(document.hasIssues, false);
   });
 
+  test('Big CellML file', () => {
+    const file = new loc.File(utils.CELLML_FILE);
+
+    file.setContents(utils.BIG_CELLML_CONTENTS);
+
+    const document = new loc.SedDocument(file);
+
+    assert.strictEqual(document.hasIssues, false);
+  });
+
   test('SED-ML file', () => {
     const file = new loc.File(utils.SEDML_FILE);
 

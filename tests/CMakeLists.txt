@@ -58,6 +58,7 @@ set(UTILS_HEADER_FILE ${CMAKE_CURRENT_BINARY_DIR}/utils.h)
 file(READ res/cellml_2.cellml CELLML_CONTENTS)
 file(READ res/error.cellml ERROR_CELLML_CONTENTS)
 file(READ res/warning.cellml WARNING_CELLML_CONTENTS)
+file(READ res/api/sed/big.cellml BIG_CELLML_CONTENTS)
 file(READ res/cellml_2.sedml SEDML_CONTENTS)
 file(READ res/api/sed/absolute_cellml_file.sedml SEDML_WITH_ABSOLUTE_CELLML_FILE_CONTENTS)
 file(READ res/api/sed/remote_cellml_file.sedml SEDML_WITH_REMOTE_CELLML_FILE_CONTENTS)
@@ -71,6 +72,9 @@ string(REGEX REPLACE "\n" "\" \\n\"" ERROR_CELLML_CONTENTS_C "${ERROR_CELLML_CON
 
 string(REPLACE "\"" "\\\"" WARNING_CELLML_CONTENTS "${WARNING_CELLML_CONTENTS}")
 string(REGEX REPLACE "\n" "\" \\n\"" WARNING_CELLML_CONTENTS_C "${WARNING_CELLML_CONTENTS}")
+
+string(REPLACE "\"" "\\\"" BIG_CELLML_CONTENTS "${BIG_CELLML_CONTENTS}")
+string(REGEX REPLACE "\n" "\" \\n\"" BIG_CELLML_CONTENTS_C "${BIG_CELLML_CONTENTS}")
 
 string(REPLACE "\"" "\\\"" SEDML_CONTENTS "${SEDML_CONTENTS}")
 string(REGEX REPLACE "\n" "\" \\n\"" SEDML_CONTENTS_C "${SEDML_CONTENTS}")

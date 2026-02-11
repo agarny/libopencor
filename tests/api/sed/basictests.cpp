@@ -45,6 +45,14 @@ TEST(BasicSedTest, cellmlFile)
     EXPECT_FALSE(document->hasIssues());
 }
 
+TEST(BasicSedTest, bigCellmlFile)
+{
+    auto file {libOpenCOR::File::create(libOpenCOR::resourcePath("api/sed/big.cellml"))};
+    auto document {libOpenCOR::SedDocument::create(file)};
+
+    EXPECT_FALSE(document->hasIssues());
+}
+
 TEST(BasicSedTest, sedmlFile)
 {
     auto file {libOpenCOR::File::create(libOpenCOR::resourcePath(libOpenCOR::SEDML_2_FILE))};
