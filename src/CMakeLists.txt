@@ -59,6 +59,12 @@ if(RELEASE_MODE AND NOT BUILDING_USING_MSVC)
     replace_compiler_flag("-O2" "-O3")
 endif()
 
+# Enable link-time optimisation for release builds to allow cross translation unit inlining and devirtualisation.
+
+if(RELEASE_MODE AND NOT EMSCRIPTEN)
+    set(CMAKE_INTERPROCEDURAL_OPTIMIZATION_RELEASE TRUE)
+endif()
+
 # Build our different third-party libraries.
 
 add_subdirectory(3rdparty)
