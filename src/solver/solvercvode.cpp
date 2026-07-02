@@ -457,6 +457,24 @@ bool SolverCvode::Impl::initialise(double pVoi, size_t pSize, double *pStates, d
                                    double *pConstants, double *pComputedConstants, double *pAlgebraicVariables,
                                    const CellmlFileRuntimePtr &pRuntime)
 {
+    // If already initialised, avoid tearing down and recreating SUNDIALS resources.
+    // Instead, update the state pointers and reinitialise with CVodeReInit.
+
+    if (mSunContext != nullptr) {
+        SolverOde::Impl::initialise(pVoi, pSize, pStates, pRates,
+                                    pConstants, pComputedConstants, pAlgebraicVariables,
+                                    pRuntime);
+
+        mUserData.constants = pConstants;
+        mUserData.computedConstants = pComputedConstants;
+        mUserData.algebraicVariables = pAlgebraicVariables;
+        mUserData.runtime = pRuntime;
+
+        ASSERT_EQ(CVodeSetUserData(mSolver, &mUserData), CV_SUCCESS);
+
+        return reinitialise(pVoi);
+    }
+
     resetInternals();
     removeAllIssues();
 
@@ -696,20 +714,18 @@ bool SolverCvode::Impl::initialise(double pVoi, size_t pSize, double *pStates, d
     return true;
 }
 
-/*---GRY--- TO BE UNCOMMENTED ONCE WE ACTUALLY NEED IT.
 bool SolverCvode::Impl::reinitialise(double pVoi)
 {
     // Reinitialise the ODE solver itself.
 
     SolverOde::Impl::reinitialise(pVoi);
 
-    // Reinitialise our CVODE solver.
+    // Reinitialise our CVODE solver without tearing down SUNDIALS resources.
 
     ASSERT_EQ(CVodeReInit(mSolver, pVoi, mStatesVector), CV_SUCCESS);
 
     return true;
 }
-*/
 
 double SolverCvode::Impl::maximumStep() const
 {

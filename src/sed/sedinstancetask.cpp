@@ -36,7 +36,10 @@ EM_JS(intptr_t, toFloat64ArrayJS, (const void* data, size_t size), {
         return Emval.toHandle(new Float64Array(0));
     }
 
-    return Emval.toHandle(new Float64Array(HEAPU8.buffer, data, size));
+    // Note: use HEAPU8.subarray() to create a view over the WASM heap's Float64Array buffer.
+    // This is safer than accessing HEAPU8.buffer directly because it creates a view with the
+    // correct byte offset, in case the WASM heap has grown since the data pointer was obtained.
+    return Emval.toHandle(new Float64Array(HEAPU8.subarray(data, data + size * 8).buffer, data, size));
 }); // clang-format on
 
 static emscripten::val toFloat64Array(const Doubles &data)
@@ -420,14 +423,17 @@ double SedInstanceTask::Impl::run()
     // Compute our model, unless it's an algebraic/NLA model in which case we are already done.
 
     if (mDifferentialModel) {
-        // Run our simulation from the initial time to the output start time, without tracking our results.
-
         const auto voiInterval {(sedUniformTimeCoursePimpl->mOutputEndTime - sedUniformTimeCoursePimpl->mOutputStartTime) / sedUniformTimeCoursePimpl->mNumberOfSteps};
 
-        run(sedUniformTimeCoursePimpl->mInitialTime, sedUniformTimeCoursePimpl->mOutputStartTime, voiInterval, false);
+        // Run our simulation from the initial time to the output start time, without tracking our results,
+        // but only if there is an actual burn-in period (i.e. the output start time is after the initial time).
 
-        if (hasIssues()) {
-            return 0.0;
+        if (!fuzzyCompare(sedUniformTimeCoursePimpl->mInitialTime, sedUniformTimeCoursePimpl->mOutputStartTime)) {
+            run(sedUniformTimeCoursePimpl->mInitialTime, sedUniformTimeCoursePimpl->mOutputStartTime, voiInterval, false);
+
+            if (hasIssues()) {
+                return 0.0;
+            }
         }
 
         // Initialise our results structure.

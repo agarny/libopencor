@@ -146,7 +146,7 @@ CellmlFileRuntimePtr CellmlFile::Impl::runtime(const CellmlFilePtr &pCellmlFile,
     {
         const std::scoped_lock<std::mutex> lock(sRuntimesMutex);
 
-        sRuntimes[pCellmlFile.get()] = runtime;
+        sRuntimes.try_emplace(pCellmlFile.get(), runtime);
     }
 
     return runtime;

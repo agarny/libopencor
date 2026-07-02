@@ -20,6 +20,8 @@ limitations under the License.
 
 #include "libopencor/solverkinsol.h"
 
+#include "sundials/sundials_context.h"
+
 namespace libOpenCOR {
 
 class SolverKinsol::Impl final: public SolverNla::Impl
@@ -37,7 +39,13 @@ public:
     int mUpperHalfBandwidth {DEFAULT_UPPER_HALF_BANDWIDTH};
     int mLowerHalfBandwidth {DEFAULT_LOWER_HALF_BANDWIDTH};
 
+    SUNContext mSunContext {nullptr};
+    size_t mCachedSize {0};
+
     explicit Impl();
+    ~Impl() override;
+
+    void resetInternals();
 
     void populate(libsedml::SedAlgorithm *pAlgorithm) override;
 
