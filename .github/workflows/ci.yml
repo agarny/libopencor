@@ -359,7 +359,9 @@ jobs:
           arch: ${{ matrix.arch }}
       - name: Install LLVM
         if: ${{ matrix.code_coverage == 'ON' }}
-        run: brew install llvm
+        run: |
+          brew install llvm
+          echo "/opt/homebrew/opt/llvm/bin" >> $GITHUB_PATH
       - name: Install Clang
         if: ${{ matrix.code_analysis == 'ON' }}
         run: |
