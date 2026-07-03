@@ -369,3 +369,29 @@ mark_as_advanced(BIOME_EXE
                  RUFF_EXE
                  SPHINX_EXE
                  VALGRIND_EXE)
+
+# Ensure that the compiler-specific archiver and ranlib tools are available, falling back to
+# the system defaults if necessary. This can happen when using a custom Clang installation
+# (e.g., for code analysis) that does not come with the matching LLVM binutils (llvm-ar
+# and llvm-ranlib), resulting in CMAKE_CXX_COMPILER_AR and/or CMAKE_CXX_COMPILER_RANLIB
+# ending up as -NOTFOUND.
+
+if(CMAKE_CXX_COMPILER_AR MATCHES "-NOTFOUND$")
+    if(CMAKE_C_COMPILER_AR AND NOT CMAKE_C_COMPILER_AR MATCHES "-NOTFOUND$")
+        set(CMAKE_CXX_COMPILER_AR "${CMAKE_C_COMPILER_AR}" CACHE FILEPATH "Archiver" FORCE)
+    elseif(CMAKE_AR AND NOT CMAKE_AR MATCHES "-NOTFOUND$")
+        set(CMAKE_CXX_COMPILER_AR "${CMAKE_AR}" CACHE FILEPATH "Archiver" FORCE)
+    else()
+        message(FATAL_ERROR "No archiver tool could be found. Please install binutils (ar) or LLVM binutils (llvm-ar).")
+    endif()
+endif()
+
+if(CMAKE_CXX_COMPILER_RANLIB MATCHES "-NOTFOUND$")
+    if(CMAKE_C_COMPILER_RANLIB AND NOT CMAKE_C_COMPILER_RANLIB MATCHES "-NOTFOUND$")
+        set(CMAKE_CXX_COMPILER_RANLIB "${CMAKE_C_COMPILER_RANLIB}" CACHE FILEPATH "Ranlib" FORCE)
+    elseif(CMAKE_RANLIB AND NOT CMAKE_RANLIB MATCHES "-NOTFOUND$")
+        set(CMAKE_CXX_COMPILER_RANLIB "${CMAKE_RANLIB}" CACHE FILEPATH "Ranlib" FORCE)
+    else()
+        message(FATAL_ERROR "No ranlib tool could be found. Please install binutils or LLVM binutils.")
+    endif()
+endif()
