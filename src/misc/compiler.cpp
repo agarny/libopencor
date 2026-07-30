@@ -632,10 +632,14 @@ extern double atanh(double);
 
     return true;
 #else
-    // Create an ORC-based JIT with aggressive code generation and keep track of it.
+    // Create an ORC-based JIT with a target machine builder for the host system.
+    // Note: we set the CPU to the host CPU name and the optimisation level to aggressive. This is because the default
+    //       CPU is generic and the default optimisation level is none, which can lead to suboptimal performance for the
+    //       generated code.
 
     auto jitTargetMachineBuilder {llvm::orc::JITTargetMachineBuilder(llvm::Triple(llvm::sys::getProcessTriple()))};
 
+    jitTargetMachineBuilder.setCPU(llvm::sys::getHostCPUName().str());
     jitTargetMachineBuilder.setCodeGenOptLevel(llvm::CodeGenOptLevel::Aggressive);
 
     auto lljit {llvm::orc::LLJITBuilder().setJITTargetMachineBuilder(std::move(jitTargetMachineBuilder)).create()};
