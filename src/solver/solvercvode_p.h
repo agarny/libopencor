@@ -32,6 +32,8 @@ struct SolverCvodeUserData
     double *algebraicVariables {nullptr};
 
     CellmlFileRuntimePtr runtime;
+
+    CellmlFileRuntime::ComputeRates computeRates {nullptr};
 };
 
 class SolverCvode::Impl final: public SolverOde::Impl

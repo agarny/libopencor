@@ -39,6 +39,8 @@ bool SolverOde::Impl::initialise(double pVoi, size_t pSize, double *pStates, dou
 
     mRuntime = pRuntime;
 
+    mComputeRates = pRuntime->computeRates();
+
     return true;
 }
 
@@ -52,7 +54,7 @@ bool SolverOde::Impl::reinitialise(double pVoi)
 void SolverOde::Impl::computeRates(double pVoi, double *pStates, double *pRates,
                                    double *pConstants, double *pComputedConstants, double *pAlgebraicVariables) const
 {
-    mRuntime->computeRates()(pVoi, pStates, pRates, pConstants, pComputedConstants, pAlgebraicVariables);
+    mComputeRates(pVoi, pStates, pRates, pConstants, pComputedConstants, pAlgebraicVariables);
 }
 
 SolverOde::SolverOde(std::unique_ptr<Impl> pPimpl)

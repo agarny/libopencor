@@ -37,6 +37,8 @@ public:
 
     CellmlFileRuntimePtr mRuntime;
 
+    CellmlFileRuntime::ComputeRates mComputeRates {nullptr};
+
     explicit Impl(const std::string &pId, const std::string &pName);
 
     virtual bool initialise(double pVoi, size_t pSize, double *pStates, double *pRates,
