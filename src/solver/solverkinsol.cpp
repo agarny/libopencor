@@ -25,6 +25,7 @@ limitations under the License.
 #include "sunlinsol/sunlinsol_spgmr.h"
 #include "sunlinsol/sunlinsol_sptfqmr.h"
 
+#include <unordered_map>
 #include <utility>
 
 namespace libOpenCOR {
@@ -67,6 +68,13 @@ void errorHandler(int pLine, const char *pFunction, const char *pFile, const cha
 }
 #endif
 
+#ifdef __EMSCRIPTEN__
+// The objective-function table slots cached in sObjectiveFunctionSlots are only valid for the runtime that is currently
+// initialised on the current thread.
+
+thread_local std::unordered_map<intptr_t, intptr_t> sObjectiveFunctionSlots; // NOLINT
+#endif
+
 struct SolverKinsolUserData
 {
 #ifdef __EMSCRIPTEN__
@@ -95,10 +103,22 @@ int computeObjectiveFunction(N_Vector pU, N_Vector pF, void *pUserData)
     }
 
 #ifdef __EMSCRIPTEN__
-    // clang-format off
-    EM_ASM({
-        globalThis.runtime.computeObjectiveFunctions[$0]($1, $2, $3);
-    }, userData->computeObjectiveFunctionIndex, N_VGetArrayPointer_Serial(pU), N_VGetArrayPointer_Serial(pF), userData->userData); // clang-format on
+    // Resolve the WebAssembly table slot of our objective function, if needed, and call it.
+    // Note: the objective-function table slots cached in sObjectiveFunctionSlots are only valid for the runtime that is
+    //       currently initialised on the current thread, so resolve them (once per solve) from globalThis.runtime.
+
+    auto slotIt {sObjectiveFunctionSlots.find(userData->computeObjectiveFunctionIndex)};
+
+    if (slotIt == sObjectiveFunctionSlots.end()) {
+        // clang-format off
+        auto slot {EM_ASM_INT({
+            return globalThis.runtime.computeObjectiveFunctionSlots[$0] | 0;
+        }, userData->computeObjectiveFunctionIndex)}; // clang-format on
+
+        slotIt = sObjectiveFunctionSlots.emplace(userData->computeObjectiveFunctionIndex, slot).first;
+    }
+
+    reinterpret_cast<SolverNla::ComputeObjectiveFunction>(slotIt->second)(N_VGetArrayPointer_Serial(pU), N_VGetArrayPointer_Serial(pF), userData->userData);
 #else
     userData->computeObjectiveFunction(N_VGetArrayPointer_Serial(pU), N_VGetArrayPointer_Serial(pF), userData->userData);
 #endif
@@ -310,6 +330,12 @@ bool SolverKinsol::Impl::solve(intptr_t pComputeObjectiveFunctionIndex, double *
 bool SolverKinsol::Impl::solve(ComputeObjectiveFunction pComputeObjectiveFunction, double *pU, size_t pN, void *pUserData)
 #endif
 {
+#ifdef __EMSCRIPTEN__
+    // Clear our cache of the WebAssembly table slots of our objective functions.
+
+    sObjectiveFunctionSlots.clear();
+#endif
+
     removeAllIssues();
 
     // We don't have any data associated with the given objective function, so get some by first making sure that the
