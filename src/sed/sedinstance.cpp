@@ -78,13 +78,16 @@ SedInstance::Impl::Impl(const SedDocumentPtr &pDocument)
                 }
             }
         }
-
-        // Keep track of the issues of all the tasks.
-
-        mTasksIssues = mIssues;
     } else {
         addError("The simulation experiment description does not contain any tasks to run.");
     }
+
+    // Keep track of the issues so that they can be restored should the instance be run.
+    // Note: this includes the issues generated above (e.g., when there are no tasks to run).
+
+    mTasksIssues = mIssues;
+    mTasksErrors = mErrors;
+    mTasksWarnings = mWarnings;
 }
 
 SedInstance::Status SedInstance::Impl::status() const
@@ -102,11 +105,28 @@ SedInstance::Status SedInstance::Impl::status() const
 
 double SedInstance::Impl::run()
 {
-    // Reset ourselves.
+    // Reset ourselves by restoring the issues of all the tasks.
+    // Note: the clearing of mIssues, mErrors, and mWarnings could be done using removeAllIssues(), but this would
+    //       result in transiently-empty issues, which could be seen by a reader. So, instead, we just clear and restore
+    //       the issues in one go.
+    // Note: the issue counts are published with std::memory_order_release so that readers using
+    //       std::memory_order_acquire never see an updated count before the corresponding issue vectors are visible.
 
-    removeAllIssues();
+    {
+        const std::scoped_lock<std::mutex> lock(mMutex);
 
-    mIssues = mTasksIssues;
+        mIssues.clear();
+        mErrors.clear();
+        mWarnings.clear();
+
+        mIssues = mTasksIssues;
+        mErrors = mTasksErrors;
+        mWarnings = mTasksWarnings;
+
+        mIssueCount.store(mIssues.size(), std::memory_order_release);
+        mErrorCount.store(mErrors.size(), std::memory_order_release);
+        mWarningCount.store(mWarnings.size(), std::memory_order_release);
+    }
 
     // Reset our control flags and make sure that they are passed to each task so that they can be used by them.
 

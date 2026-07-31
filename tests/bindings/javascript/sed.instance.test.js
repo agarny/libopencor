@@ -41,6 +41,13 @@ test.describe('Sed instance tests', () => {
       [loc.Issue.Type.ERROR, 'The simulation experiment description does not contain any tasks to run.']
     ]);
     assert.strictEqual(instance.progress, 0.0);
+
+    // Make sure that the issues are still present after "running" the instance.
+
+    assert.strictEqual(instance.run(), 0.0);
+    assertIssues(loc, instance, [
+      [loc.Issue.Type.ERROR, 'The simulation experiment description does not contain any tasks to run.']
+    ]);
   });
 
   test('Invalid CellML file', () => {
