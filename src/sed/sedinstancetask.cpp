@@ -257,39 +257,20 @@ void SedInstanceTask::Impl::initialise()
     if (mSedUniformTimeCourse != nullptr) {
         mVoi = mSedUniformTimeCourse->pimpl()->mInitialTime;
 
-#ifdef __EMSCRIPTEN__
-        mRuntime->initialiseArraysForDifferentialModel(mStates, mRates, mConstants, mComputedConstants, mAlgebraicVariables);
-#else
         mRuntime->initialiseArraysForDifferentialModel()(mStates, mRates, mConstants, mComputedConstants, mAlgebraicVariables);
-#endif
     } else {
-#ifdef __EMSCRIPTEN__
-        mRuntime->initialiseArraysForAlgebraicModel(mConstants, mComputedConstants, mAlgebraicVariables);
-#else
         mRuntime->initialiseArraysForAlgebraicModel()(mConstants, mComputedConstants, mAlgebraicVariables);
-#endif
     }
 
     applyChanges();
 
     if (mSedUniformTimeCourse != nullptr) {
-#ifdef __EMSCRIPTEN__
-        mRuntime->computeComputedConstantsForDifferentialModel(mVoi, mStates, mRates, mConstants, mComputedConstants, mAlgebraicVariables);
-        mRuntime->computeRates(mVoi, mStates, mRates, mConstants, mComputedConstants, mAlgebraicVariables);
-        mRuntime->computeVariablesForDifferentialModel(mVoi, mStates, mRates, mConstants, mComputedConstants, mAlgebraicVariables);
-#else
         mRuntime->computeComputedConstantsForDifferentialModel()(mVoi, mStates, mRates, mConstants, mComputedConstants, mAlgebraicVariables);
         mRuntime->computeRates()(mVoi, mStates, mRates, mConstants, mComputedConstants, mAlgebraicVariables);
         mRuntime->computeVariablesForDifferentialModel()(mVoi, mStates, mRates, mConstants, mComputedConstants, mAlgebraicVariables);
-#endif
     } else {
-#ifdef __EMSCRIPTEN__
-        mRuntime->computeComputedConstantsForAlgebraicModel(mConstants, mComputedConstants, mAlgebraicVariables);
-        mRuntime->computeVariablesForAlgebraicModel(mConstants, mComputedConstants, mAlgebraicVariables);
-#else
         mRuntime->computeComputedConstantsForAlgebraicModel()(mConstants, mComputedConstants, mAlgebraicVariables);
         mRuntime->computeVariablesForAlgebraicModel()(mConstants, mComputedConstants, mAlgebraicVariables);
-#endif
     }
 
     // Make sure that the NLA solver, should it have been used, didn't report any issues.
@@ -355,9 +336,7 @@ void SedInstanceTask::Impl::run(double pVoiStart, double pVoiEnd, double pVoiInt
     auto *odeSolverPimpl {mOdeSolver->pimpl()};
     size_t voiCounter {0};
 
-#ifndef __EMSCRIPTEN__
     const auto computeVariablesForDifferentialModel = mRuntime->computeVariablesForDifferentialModel();
-#endif
 
     while (!fuzzyCompare(mVoi, pVoiEnd)) {
         // Check whether a pause or stop has been requested.
@@ -396,11 +375,7 @@ void SedInstanceTask::Impl::run(double pVoiStart, double pVoiEnd, double pVoiInt
             return;
         }
 
-#ifdef __EMSCRIPTEN__
-        mRuntime->computeVariablesForDifferentialModel(mVoi, mStates, mRates, mConstants, mComputedConstants, mAlgebraicVariables);
-#else
         computeVariablesForDifferentialModel(mVoi, mStates, mRates, mConstants, mComputedConstants, mAlgebraicVariables);
-#endif
 
         //---GRY--- WE NEED TO CHECK FOR POSSIBLE NLA ISSUES, BUT FOR CODE COVERAGE WE NEED A MODEL THAT WOULD TRIGGER
         //          NLA ISSUES HERE, WHICH WE DON'T HAVE YET HENCE WE DISABLE THE FOLLOWING CODE WHEN DOING CODE

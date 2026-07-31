@@ -52,11 +52,7 @@ bool SolverOde::Impl::reinitialise(double pVoi)
 void SolverOde::Impl::computeRates(double pVoi, double *pStates, double *pRates,
                                    double *pConstants, double *pComputedConstants, double *pAlgebraicVariables) const
 {
-#ifdef __EMSCRIPTEN__
-    mRuntime->computeRates(pVoi, pStates, pRates, pConstants, pComputedConstants, pAlgebraicVariables);
-#else
     mRuntime->computeRates()(pVoi, pStates, pRates, pConstants, pComputedConstants, pAlgebraicVariables);
-#endif
 }
 
 SolverOde::SolverOde(std::unique_ptr<Impl> pPimpl)

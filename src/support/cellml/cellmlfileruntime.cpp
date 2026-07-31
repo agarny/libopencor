@@ -431,9 +431,14 @@ EM_JS(void, initialiseArraysForAlgebraicModelJS, (const void* constants, const v
     Module.initialiseArrays(constants, computedConstants, algebraicVariables);
 }); // clang-format on
 
-void CellmlFileRuntime::Impl::initialiseArraysForAlgebraicModel(double *pConstants, double *pComputedConstants, double *pAlgebraicVariables) const
+static void initialiseArraysForAlgebraicModelTrampoline(double *pConstants, double *pComputedConstants, double *pAlgebraicVariables)
 {
     initialiseArraysForAlgebraicModelJS(pConstants, pComputedConstants, pAlgebraicVariables);
+}
+
+CellmlFileRuntime::InitialiseArraysForAlgebraicModel CellmlFileRuntime::Impl::initialiseArraysForAlgebraicModel() const
+{
+    return &initialiseArraysForAlgebraicModelTrampoline;
 }
 
 // clang-format off
@@ -441,9 +446,14 @@ EM_JS(void, initialiseArraysForDifferentialModelJS, (const void* states, const v
     Module.initialiseArrays(states, rates, constants, computedConstants, algebraicVariables);
 }); // clang-format on
 
-void CellmlFileRuntime::Impl::initialiseArraysForDifferentialModel(double *pStates, double *pRates, double *pConstants, double *pComputedConstants, double *pAlgebraicVariables) const
+static void initialiseArraysForDifferentialModelTrampoline(double *pStates, double *pRates, double *pConstants, double *pComputedConstants, double *pAlgebraicVariables)
 {
     initialiseArraysForDifferentialModelJS(pStates, pRates, pConstants, pComputedConstants, pAlgebraicVariables);
+}
+
+CellmlFileRuntime::InitialiseArraysForDifferentialModel CellmlFileRuntime::Impl::initialiseArraysForDifferentialModel() const
+{
+    return &initialiseArraysForDifferentialModelTrampoline;
 }
 
 // clang-format off
@@ -451,9 +461,14 @@ EM_JS(void, computeComputedConstantsForAlgebraicModelJS, (const void* constants,
     Module.computeComputedConstants(constants, computedConstants, algebraicVariables);
 }); // clang-format on
 
-void CellmlFileRuntime::Impl::computeComputedConstantsForAlgebraicModel(double *pConstants, double *pComputedConstants, double *pAlgebraicVariables) const
+static void computeComputedConstantsForAlgebraicModelTrampoline(double *pConstants, double *pComputedConstants, double *pAlgebraicVariables)
 {
     computeComputedConstantsForAlgebraicModelJS(pConstants, pComputedConstants, pAlgebraicVariables);
+}
+
+CellmlFileRuntime::ComputeComputedConstantsForAlgebraicModel CellmlFileRuntime::Impl::computeComputedConstantsForAlgebraicModel() const
+{
+    return &computeComputedConstantsForAlgebraicModelTrampoline;
 }
 
 // clang-format off
@@ -461,9 +476,14 @@ EM_JS(void, computeComputedConstantsForDifferentialModelJS, (double voi, const v
     Module.computeComputedConstants(voi, states, rates, constants, computedConstants, algebraicVariables);
 }); // clang-format on
 
-void CellmlFileRuntime::Impl::computeComputedConstantsForDifferentialModel(double pVoi, double *pStates, double *pRates, double *pConstants, double *pComputedConstants, double *pAlgebraicVariables) const
+static void computeComputedConstantsForDifferentialModelTrampoline(double pVoi, double *pStates, double *pRates, double *pConstants, double *pComputedConstants, double *pAlgebraicVariables)
 {
     computeComputedConstantsForDifferentialModelJS(pVoi, pStates, pRates, pConstants, pComputedConstants, pAlgebraicVariables);
+}
+
+CellmlFileRuntime::ComputeComputedConstantsForDifferentialModel CellmlFileRuntime::Impl::computeComputedConstantsForDifferentialModel() const
+{
+    return &computeComputedConstantsForDifferentialModelTrampoline;
 }
 
 // clang-format off
@@ -471,9 +491,14 @@ EM_JS(void, computeRatesJS, (double voi, const void* states, const void* rates, 
     Module.computeRates(voi, states, rates, constants, computedConstants, algebraicVariables);
 }); // clang-format on
 
-void CellmlFileRuntime::Impl::computeRates(double pVoi, double *pStates, double *pRates, double *pConstants, double *pComputedConstants, double *pAlgebraicVariables) const
+static void computeRatesTrampoline(double pVoi, double *pStates, double *pRates, double *pConstants, double *pComputedConstants, double *pAlgebraicVariables)
 {
     computeRatesJS(pVoi, pStates, pRates, pConstants, pComputedConstants, pAlgebraicVariables);
+}
+
+CellmlFileRuntime::ComputeRates CellmlFileRuntime::Impl::computeRates() const
+{
+    return &computeRatesTrampoline;
 }
 
 // clang-format off
@@ -481,9 +506,14 @@ EM_JS(void, computeVariablesForAlgebraicModelJS, (const void* constants, const v
     Module.computeVariables(constants, computedConstants, algebraicVariables);
 }); // clang-format on
 
-void CellmlFileRuntime::Impl::computeVariablesForAlgebraicModel(double *pConstants, double *pComputedConstants, double *pAlgebraicVariables) const
+static void computeVariablesForAlgebraicModelTrampoline(double *pConstants, double *pComputedConstants, double *pAlgebraicVariables)
 {
     computeVariablesForAlgebraicModelJS(pConstants, pComputedConstants, pAlgebraicVariables);
+}
+
+CellmlFileRuntime::ComputeVariablesForAlgebraicModel CellmlFileRuntime::Impl::computeVariablesForAlgebraicModel() const
+{
+    return &computeVariablesForAlgebraicModelTrampoline;
 }
 
 // clang-format off
@@ -491,9 +521,14 @@ EM_JS(void, computeVariablesForDifferentialModelJS, (double voi, const void* sta
     Module.computeVariables(voi, states, rates, constants, computedConstants, algebraicVariables);
 }); // clang-format on
 
-void CellmlFileRuntime::Impl::computeVariablesForDifferentialModel(double pVoi, double *pStates, double *pRates, double *pConstants, double *pComputedConstants, double *pAlgebraicVariables) const
+static void computeVariablesForDifferentialModelTrampoline(double pVoi, double *pStates, double *pRates, double *pConstants, double *pComputedConstants, double *pAlgebraicVariables)
 {
     computeVariablesForDifferentialModelJS(pVoi, pStates, pRates, pConstants, pComputedConstants, pAlgebraicVariables);
+}
+
+CellmlFileRuntime::ComputeVariablesForDifferentialModel CellmlFileRuntime::Impl::computeVariablesForDifferentialModel() const
+{
+    return &computeVariablesForDifferentialModelTrampoline;
 }
 #else
 CellmlFileRuntime::InitialiseArraysForAlgebraicModel CellmlFileRuntime::Impl::initialiseArraysForAlgebraicModel() const
@@ -572,42 +607,8 @@ void CellmlFileRuntime::setNlaSolverAddress(uintptr_t pAddress) const
 {
     pimpl()->setNlaSolverAddress(pAddress);
 }
+#endif
 
-void CellmlFileRuntime::initialiseArraysForAlgebraicModel(double *pConstants, double *pComputedConstants, double *pAlgebraicVariables) const
-{
-    pimpl()->initialiseArraysForAlgebraicModel(pConstants, pComputedConstants, pAlgebraicVariables);
-}
-
-void CellmlFileRuntime::initialiseArraysForDifferentialModel(double *pStates, double *pRates, double *pConstants, double *pComputedConstants, double *pAlgebraicVariables) const
-{
-    pimpl()->initialiseArraysForDifferentialModel(pStates, pRates, pConstants, pComputedConstants, pAlgebraicVariables);
-}
-
-void CellmlFileRuntime::computeComputedConstantsForAlgebraicModel(double *pConstants, double *pComputedConstants, double *pAlgebraicVariables) const
-{
-    pimpl()->computeComputedConstantsForAlgebraicModel(pConstants, pComputedConstants, pAlgebraicVariables);
-}
-
-void CellmlFileRuntime::computeComputedConstantsForDifferentialModel(double pVoi, double *pStates, double *pRates, double *pConstants, double *pComputedConstants, double *pAlgebraicVariables) const
-{
-    pimpl()->computeComputedConstantsForDifferentialModel(pVoi, pStates, pRates, pConstants, pComputedConstants, pAlgebraicVariables);
-}
-
-void CellmlFileRuntime::computeRates(double pVoi, double *pStates, double *pRates, double *pConstants, double *pComputedConstants, double *pAlgebraicVariables) const
-{
-    pimpl()->computeRates(pVoi, pStates, pRates, pConstants, pComputedConstants, pAlgebraicVariables);
-}
-
-void CellmlFileRuntime::computeVariablesForAlgebraicModel(double *pConstants, double *pComputedConstants, double *pAlgebraicVariables) const
-{
-    pimpl()->computeVariablesForAlgebraicModel(pConstants, pComputedConstants, pAlgebraicVariables);
-}
-
-void CellmlFileRuntime::computeVariablesForDifferentialModel(double pVoi, double *pStates, double *pRates, double *pConstants, double *pComputedConstants, double *pAlgebraicVariables) const
-{
-    pimpl()->computeVariablesForDifferentialModel(pVoi, pStates, pRates, pConstants, pComputedConstants, pAlgebraicVariables);
-}
-#else
 CellmlFileRuntime::InitialiseArraysForAlgebraicModel CellmlFileRuntime::initialiseArraysForAlgebraicModel() const
 {
     return pimpl()->initialiseArraysForAlgebraicModel();
@@ -642,6 +643,5 @@ CellmlFileRuntime::ComputeVariablesForDifferentialModel CellmlFileRuntime::compu
 {
     return pimpl()->computeVariablesForDifferentialModel();
 }
-#endif
 
 } // namespace libOpenCOR
