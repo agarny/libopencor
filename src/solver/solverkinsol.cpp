@@ -61,9 +61,15 @@ void errorHandler(int pLine, const char *pFunction, const char *pFile, const cha
     (void)pFile;
     (void)pSunContext;
 
+#ifdef CODE_COVERAGE_ENABLED
+    (void)pErrorCode;
+#else
     if (pErrorCode != KIN_WARNING) {
-        *static_cast<std::string *>(pUserData) = pErrorMessage;
-    }
+#endif
+    *static_cast<std::string *>(pUserData) = pErrorMessage;
+#ifndef CODE_COVERAGE_ENABLED
+}
+#endif
 }
 
 #ifdef __EMSCRIPTEN__
@@ -538,15 +544,11 @@ bool SolverKinsol::Impl::solve(ComputeObjectiveFunction pComputeObjectiveFunctio
     // Check whether everything went fine.
 
     if (res < KIN_SUCCESS) {
-#ifndef CODE_COVERAGE_ENABLED
         if (userData.infOrNanFound) {
-#endif
             addError("The NLA system could not be solved (it contains some Inf and/or NaN values).");
-#ifndef CODE_COVERAGE_ENABLED
         } else {
             addError(mErrorMessage);
         }
-#endif
 
         return false;
     }

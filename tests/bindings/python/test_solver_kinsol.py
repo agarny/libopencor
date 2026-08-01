@@ -220,3 +220,25 @@ def test_solve_with_tfqmr_linear_solver():
     instance.run()
 
     expect_nla1_solution(instance.tasks[0])
+
+
+def test_solve_with_different_system_sizes():
+    file = loc.File(utils.resource_path("api/solver/nla3.cellml"))
+    document = loc.SedDocument(file)
+    instance = document.instantiate()
+
+    instance.run()
+
+    instance_task = instance.tasks[0]
+
+    assert instance_task.state_count == 0
+    assert instance_task.rate_count == 0
+    assert instance_task.constant_count == 0
+    assert instance_task.computed_constant_count == 0
+    assert instance_task.algebraic_variable_count == 5
+
+    assert instance_task.algebraic_variable(0)[0] == pytest.approx(1.0, abs=ABS_TOL)
+    assert instance_task.algebraic_variable(1)[0] == pytest.approx(2.0, abs=ABS_TOL)
+    assert instance_task.algebraic_variable(2)[0] == pytest.approx(7.0, abs=ABS_TOL)
+    assert instance_task.algebraic_variable(3)[0] == pytest.approx(-5.0, abs=ABS_TOL)
+    assert instance_task.algebraic_variable(4)[0] == pytest.approx(3.0, abs=ABS_TOL)

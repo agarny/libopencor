@@ -219,3 +219,26 @@ TEST(KinsolSolverTest, solveWithTfqmrLinearSolver)
 
     expectNla1Solution(instance->tasks()[0]);
 }
+
+TEST(KinsolSolverTest, solveWithDifferentSystemSizes)
+{
+    auto file {libOpenCOR::File::create(libOpenCOR::resourcePath("api/solver/nla3.cellml"))};
+    auto document {libOpenCOR::SedDocument::create(file)};
+    auto instance {document->instantiate()};
+
+    instance->run();
+
+    const auto &instanceTask {instance->tasks()[0]};
+
+    EXPECT_EQ(instanceTask->stateCount(), 0U);
+    EXPECT_EQ(instanceTask->rateCount(), 0U);
+    EXPECT_EQ(instanceTask->constantCount(), 0U);
+    EXPECT_EQ(instanceTask->computedConstantCount(), 0U);
+    EXPECT_EQ(instanceTask->algebraicVariableCount(), 5U);
+
+    EXPECT_NEAR(instanceTask->algebraicVariable(0)[0], 1.0, ABS_TOL);
+    EXPECT_NEAR(instanceTask->algebraicVariable(1)[0], 2.0, ABS_TOL);
+    EXPECT_NEAR(instanceTask->algebraicVariable(2)[0], 7.0, ABS_TOL);
+    EXPECT_NEAR(instanceTask->algebraicVariable(3)[0], -5.0, ABS_TOL);
+    EXPECT_NEAR(instanceTask->algebraicVariable(4)[0], 3.0, ABS_TOL);
+}

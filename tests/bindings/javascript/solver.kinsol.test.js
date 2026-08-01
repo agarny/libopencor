@@ -246,4 +246,29 @@ test.describe('Solver KINSOL tests', () => {
 
     assertNla1Solution(instance.tasks[0]);
   });
+
+  test('Solve with different system sizes', () => {
+    const file = new loc.File(utils.resourcePath('api/solver/nla3.cellml'));
+
+    file.setContents(utils.fileContents(file.path));
+
+    const document = new loc.SedDocument(file);
+    const instance = document.instantiate();
+
+    instance.run();
+
+    const instanceTask = instance.tasks[0];
+
+    assert.strictEqual(instanceTask.stateCount, 0);
+    assert.strictEqual(instanceTask.rateCount, 0);
+    assert.strictEqual(instanceTask.constantCount, 0);
+    assert.strictEqual(instanceTask.computedConstantCount, 0);
+    assert.strictEqual(instanceTask.algebraicVariableCount, 5);
+
+    assertValue(instanceTask.algebraicVariable(0)[0], 1.0, 5);
+    assertValue(instanceTask.algebraicVariable(1)[0], 2.0, 5);
+    assertValue(instanceTask.algebraicVariable(2)[0], 7.0, 5);
+    assertValue(instanceTask.algebraicVariable(3)[0], -5.0, 5);
+    assertValue(instanceTask.algebraicVariable(4)[0], 3.0, 5);
+  });
 });
