@@ -53,7 +53,6 @@ std::string toString(SolverKinsol::LinearSolver pLinearSolver)
 
 namespace {
 
-#ifndef CODE_COVERAGE_ENABLED
 void errorHandler(int pLine, const char *pFunction, const char *pFile, const char *pErrorMessage, SUNErrCode pErrorCode,
                   void *pUserData, SUNContext pSunContext)
 {
@@ -66,7 +65,6 @@ void errorHandler(int pLine, const char *pFunction, const char *pFile, const cha
         *static_cast<std::string *>(pUserData) = pErrorMessage;
     }
 }
-#endif
 
 #ifdef __EMSCRIPTEN__
 // The objective-function table slots cached in sObjectiveFunctionSlots are only valid for the runtime that is currently
@@ -416,10 +414,8 @@ bool SolverKinsol::Impl::solve(ComputeObjectiveFunction pComputeObjectiveFunctio
 
     // Use our own error handler and disable the logger.
 
-#ifndef CODE_COVERAGE_ENABLED
     ASSERT_EQ(SUNContext_PushErrHandler(mSunContext, errorHandler, &mErrorMessage), KIN_SUCCESS);
     ASSERT_EQ(SUNContext_SetLogger(mSunContext, nullptr), KIN_SUCCESS);
-#endif
 
     // Initialise our KINSOL solver.
 
