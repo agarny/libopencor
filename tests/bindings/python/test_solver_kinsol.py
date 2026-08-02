@@ -163,6 +163,13 @@ def test_solve():
 def test_solve_with_banded_linear_solver():
     file = loc.File(utils.resource_path("api/solver/nla2.cellml"))
     document = loc.SedDocument(file)
+    simulation = document.simulations[0]
+    solver = simulation.nla_solver
+
+    solver.linear_solver = loc.SolverKinsol.LinearSolver.Banded
+    solver.upper_half_bandwidth = 2
+    solver.lower_half_bandwidth = 2
+
     instance = document.instantiate()
 
     instance.run()
@@ -173,6 +180,11 @@ def test_solve_with_banded_linear_solver():
 def test_solve_with_gmres_linear_solver():
     file = loc.File(utils.resource_path("api/solver/nla1.cellml"))
     document = loc.SedDocument(file)
+    simulation = document.simulations[0]
+    solver = simulation.nla_solver
+
+    solver.linear_solver = loc.SolverKinsol.LinearSolver.Gmres
+
     instance = document.instantiate()
 
     instance.run()
@@ -183,6 +195,11 @@ def test_solve_with_gmres_linear_solver():
 def test_solve_with_bicgstab_linear_solver():
     file = loc.File(utils.resource_path("api/solver/nla2.cellml"))
     document = loc.SedDocument(file)
+    simulation = document.simulations[0]
+    solver = simulation.nla_solver
+
+    solver.linear_solver = loc.SolverKinsol.LinearSolver.Bicgstab
+
     instance = document.instantiate()
 
     instance.run()
@@ -193,6 +210,11 @@ def test_solve_with_bicgstab_linear_solver():
 def test_solve_with_tfqmr_linear_solver():
     file = loc.File(utils.resource_path("api/solver/nla1.cellml"))
     document = loc.SedDocument(file)
+    simulation = document.simulations[0]
+    solver = simulation.nla_solver
+
+    solver.linear_solver = loc.SolverKinsol.LinearSolver.Tfqmr
+
     instance = document.instantiate()
 
     instance.run()
