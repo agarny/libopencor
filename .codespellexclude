@@ -1,10 +1,14 @@
-  afterAll(() => {
+    <!-- BG CVS MVP + Finbar's ANS + Peter's Blood volume Ctl model -->
+        <!-- controlling and modulating the resistance by ANS
     IssuePtrs mErrors;
-    return !mErrors.empty();
-    return mErrors.size();
     return mErrors;
-        mErrors.push_back(issue);
-    mErrors.clear();
     if (pIndex >= mErrors.size()) {
     return mErrors[pIndex];
         mErrors.push_back(std::move(issue));
+    mErrors.clear();
+    mTasksErrors = mErrors;
+        mErrors.clear();
+    // Note: the clearing of mIssues, mErrors, and mWarnings could be done using removeAllIssues(), but this would
+        mErrors = mTasksErrors;
+        mErrorCount.store(mErrors.size(), std::memory_order_release);
+    if ((document->getNumErrors() == 0)
