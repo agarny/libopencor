@@ -1,3 +1,4 @@
+let loc = null;
 let fileManager = null;
 let file = null;
 let document = null;
@@ -370,8 +371,12 @@ import libOpenCOR from '../libopencor.js';
 $(() => {
   // Make sure that libOpenCOR is loaded before we do anything else.
 
-  libOpenCOR().then((loc) => {
-    // Keep track of the file manager.
+  libOpenCOR().then((result) => {
+    // Keep track of libOpenCOR.
+
+    loc = result;
+
+    // Keep track of the library and the file manager.
 
     fileManager = loc.FileManager.instance();
 

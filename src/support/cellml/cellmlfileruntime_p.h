@@ -31,7 +31,6 @@ public:
     UnsignedChars mWasmModule;
 #endif
 
-#ifndef __EMSCRIPTEN__
     InitialiseArraysForAlgebraicModel mInitialiseArraysForAlgebraicModel {nullptr};
     InitialiseArraysForDifferentialModel mInitialiseArraysForDifferentialModel {nullptr};
     ComputeComputedConstantsForAlgebraicModel mComputeComputedConstantsForAlgebraicModel {nullptr};
@@ -39,7 +38,6 @@ public:
     ComputeRates mComputeRates {nullptr};
     ComputeVariablesForAlgebraicModel mComputeVariablesForAlgebraicModel {nullptr};
     ComputeVariablesForDifferentialModel mComputeVariablesForDifferentialModel {nullptr};
-#endif
 
     explicit Impl(const CellmlFilePtr &pCellmlFile, const SolverNlaPtr &pNlaSolver);
 #ifdef __EMSCRIPTEN__
@@ -49,15 +47,8 @@ public:
     void cleanupWorkerWasm() const;
 
     void setNlaSolverAddress(uintptr_t pAddress) const;
+#endif
 
-    void initialiseArraysForAlgebraicModel(double *pConstants, double *pComputedConstants, double *pAlgebraicVariables) const;
-    void initialiseArraysForDifferentialModel(double *pStates, double *pRates, double *pConstants, double *pComputedConstants, double *pAlgebraicVariables) const;
-    void computeComputedConstantsForAlgebraicModel(double *pConstants, double *pComputedConstants, double *pAlgebraicVariables) const;
-    void computeComputedConstantsForDifferentialModel(double pVoi, double *pStates, double *pRates, double *pConstants, double *pComputedConstants, double *pAlgebraicVariables) const;
-    void computeRates(double pVoi, double *pStates, double *pRates, double *pConstants, double *pComputedConstants, double *pAlgebraicVariables) const;
-    void computeVariablesForAlgebraicModel(double *pConstants, double *pComputedConstants, double *pAlgebraicVariables) const;
-    void computeVariablesForDifferentialModel(double pVoi, double *pStates, double *pRates, double *pConstants, double *pComputedConstants, double *pAlgebraicVariables) const;
-#else
     CellmlFileRuntime::InitialiseArraysForAlgebraicModel initialiseArraysForAlgebraicModel() const;
     CellmlFileRuntime::InitialiseArraysForDifferentialModel initialiseArraysForDifferentialModel() const;
     CellmlFileRuntime::ComputeComputedConstantsForAlgebraicModel computeComputedConstantsForAlgebraicModel() const;
@@ -65,7 +56,6 @@ public:
     CellmlFileRuntime::ComputeRates computeRates() const;
     CellmlFileRuntime::ComputeVariablesForAlgebraicModel computeVariablesForAlgebraicModel() const;
     CellmlFileRuntime::ComputeVariablesForDifferentialModel computeVariablesForDifferentialModel() const;
-#endif
 };
 
 } // namespace libOpenCOR

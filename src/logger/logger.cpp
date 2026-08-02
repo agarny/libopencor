@@ -21,28 +21,24 @@ namespace libOpenCOR {
 
 bool Logger::Impl::hasIssues() const
 {
-    const std::scoped_lock<std::recursive_mutex> lock(mMutex);
-
-    return !mIssues.empty();
+    return mIssueCount.load(std::memory_order_acquire) != 0;
 }
 
 size_t Logger::Impl::issueCount() const
 {
-    const std::scoped_lock<std::recursive_mutex> lock(mMutex);
-
-    return mIssues.size();
+    return mIssueCount.load(std::memory_order_acquire);
 }
 
 IssuePtrs Logger::Impl::issues() const
 {
-    const std::scoped_lock<std::recursive_mutex> lock(mMutex);
+    const std::scoped_lock<std::mutex> lock(mMutex);
 
     return mIssues;
 }
 
 IssuePtr Logger::Impl::issue(size_t pIndex) const
 {
-    const std::scoped_lock<std::recursive_mutex> lock(mMutex);
+    const std::scoped_lock<std::mutex> lock(mMutex);
 
     if (pIndex >= mIssues.size()) {
         return nullptr;
@@ -53,28 +49,24 @@ IssuePtr Logger::Impl::issue(size_t pIndex) const
 
 bool Logger::Impl::hasErrors() const
 {
-    const std::scoped_lock<std::recursive_mutex> lock(mMutex);
-
-    return !mErrors.empty();
+    return mErrorCount.load(std::memory_order_acquire) != 0;
 }
 
 size_t Logger::Impl::errorCount() const
 {
-    const std::scoped_lock<std::recursive_mutex> lock(mMutex);
-
-    return mErrors.size();
+    return mErrorCount.load(std::memory_order_acquire);
 }
 
 IssuePtrs Logger::Impl::errors() const
 {
-    const std::scoped_lock<std::recursive_mutex> lock(mMutex);
+    const std::scoped_lock<std::mutex> lock(mMutex);
 
     return mErrors;
 }
 
 IssuePtr Logger::Impl::error(size_t pIndex) const
 {
-    const std::scoped_lock<std::recursive_mutex> lock(mMutex);
+    const std::scoped_lock<std::mutex> lock(mMutex);
 
     if (pIndex >= mErrors.size()) {
         return nullptr;
@@ -85,28 +77,24 @@ IssuePtr Logger::Impl::error(size_t pIndex) const
 
 bool Logger::Impl::hasWarnings() const
 {
-    const std::scoped_lock<std::recursive_mutex> lock(mMutex);
-
-    return !mWarnings.empty();
+    return mWarningCount.load(std::memory_order_acquire) != 0;
 }
 
 size_t Logger::Impl::warningCount() const
 {
-    const std::scoped_lock<std::recursive_mutex> lock(mMutex);
-
-    return mWarnings.size();
+    return mWarningCount.load(std::memory_order_acquire);
 }
 
 IssuePtrs Logger::Impl::warnings() const
 {
-    const std::scoped_lock<std::recursive_mutex> lock(mMutex);
+    const std::scoped_lock<std::mutex> lock(mMutex);
 
     return mWarnings;
 }
 
 IssuePtr Logger::Impl::warning(size_t pIndex) const
 {
-    const std::scoped_lock<std::recursive_mutex> lock(mMutex);
+    const std::scoped_lock<std::mutex> lock(mMutex);
 
     if (pIndex >= mWarnings.size()) {
         return nullptr;
@@ -139,15 +127,21 @@ void Logger::Impl::addIssues(const libcellml::LoggerPtr &pLogger, const std::str
 
 void Logger::Impl::addIssue(Issue::Type pType, const std::string &pDescription, const std::string &pContext)
 {
-    const std::scoped_lock<std::recursive_mutex> lock(mMutex);
+    const std::scoped_lock<std::mutex> lock(mMutex);
 
     auto issue {IssuePtr {new Issue {pType, pDescription, pContext}}};
     mIssues.push_back(issue);
 
+    mIssueCount.fetch_add(1, std::memory_order_release);
+
     if (pType == Issue::Type::ERROR) {
         mErrors.push_back(std::move(issue));
+
+        mErrorCount.fetch_add(1, std::memory_order_release);
     } else {
         mWarnings.push_back(std::move(issue));
+
+        mWarningCount.fetch_add(1, std::memory_order_release);
     }
 }
 
@@ -163,12 +157,15 @@ void Logger::Impl::addWarning(const std::string &pDescription)
 
 void Logger::Impl::removeAllIssues()
 {
-    const std::scoped_lock<std::recursive_mutex> lock(mMutex);
+    const std::scoped_lock<std::mutex> lock(mMutex);
 
     mIssues.clear();
-
     mErrors.clear();
     mWarnings.clear();
+
+    mIssueCount.store(0, std::memory_order_release);
+    mErrorCount.store(0, std::memory_order_release);
+    mWarningCount.store(0, std::memory_order_release);
 }
 
 Logger::Logger(std::unique_ptr<Impl> pPimpl)

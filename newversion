@@ -12,7 +12,7 @@ old_patch_version=$(echo $old_version | cut -d. -f3)
 
 # Determine the new version based on the current version and the current date.
 
-now=$(date +%Y%m%d)
+now=$(TZ=Pacific/Auckland date +%Y%m%d)
 
 new_major_version=$old_major_version
 new_minor_version=$now

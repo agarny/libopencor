@@ -101,13 +101,8 @@ int rhsFunction(double pVoi, N_Vector pStates, N_Vector pRates, void *pUserData)
 {
     auto *userData {static_cast<SolverCvodeUserData *>(pUserData)};
 
-#ifdef __EMSCRIPTEN__
-    userData->runtime->computeRates(pVoi, N_VGetArrayPointer_Serial(pStates), N_VGetArrayPointer_Serial(pRates),
-                                    userData->constants, userData->computedConstants, userData->algebraicVariables);
-#else
-        userData->runtime->computeRates()(pVoi, N_VGetArrayPointer_Serial(pStates), N_VGetArrayPointer_Serial(pRates),
-                                          userData->constants, userData->computedConstants, userData->algebraicVariables);
-#endif
+    userData->computeRates(pVoi, N_VGetArrayPointer_Serial(pStates), N_VGetArrayPointer_Serial(pRates),
+                           userData->constants, userData->computedConstants, userData->algebraicVariables);
 
     return 0;
 }
@@ -467,7 +462,10 @@ bool SolverCvode::Impl::initialise(double pVoi, size_t pSize, double *pStates, d
         mUserData.constants = pConstants;
         mUserData.computedConstants = pComputedConstants;
         mUserData.algebraicVariables = pAlgebraicVariables;
+
         mUserData.runtime = pRuntime;
+
+        mUserData.computeRates = pRuntime->computeRates();
 
         ASSERT_EQ(CVodeSetUserData(mSolver, &mUserData), CV_SUCCESS);
 
@@ -628,7 +626,10 @@ bool SolverCvode::Impl::initialise(double pVoi, size_t pSize, double *pStates, d
     mUserData.constants = pConstants;
     mUserData.computedConstants = pComputedConstants;
     mUserData.algebraicVariables = pAlgebraicVariables;
+
     mUserData.runtime = pRuntime;
+
+    mUserData.computeRates = pRuntime->computeRates();
 
     ASSERT_EQ(CVodeSetUserData(mSolver, &mUserData), CV_SUCCESS);
 

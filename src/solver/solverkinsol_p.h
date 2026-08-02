@@ -21,6 +21,9 @@ limitations under the License.
 #include "libopencor/solverkinsol.h"
 
 #include "sundials/sundials_context.h"
+#include "sundials/sundials_linearsolver.h"
+#include "sundials/sundials_matrix.h"
+#include "sundials/sundials_nvector.h"
 
 namespace libOpenCOR {
 
@@ -41,8 +44,29 @@ public:
 
     SUNContext mSunContext {nullptr};
 
+    // Note: KINSOL and its associated objects below are cached and reused across solve() calls to avoid repeated
+    //       creation/destruction overhead. This means a single SolverKinsol instance is NOT thread-safe for concurrent
+    //       solve() calls (multiple threads sharing the same solver instance would race on these members). The intended
+    //       usage model is one solver instance per simulation thread.
+
+    void *mSolver {nullptr};
+
+    N_Vector mU {nullptr};
+    N_Vector mOnes {nullptr};
+
+    SUNMatrix mSunMatrix {nullptr};
+    SUNLinearSolver mSunLinearSolver {nullptr};
+
+    size_t mCachedN {0};
+    double *mCachedU {nullptr};
+    LinearSolver mCachedLinearSolver {DEFAULT_LINEAR_SOLVER};
+    int mCachedUpperHalfBandwidth {DEFAULT_UPPER_HALF_BANDWIDTH};
+    int mCachedLowerHalfBandwidth {DEFAULT_LOWER_HALF_BANDWIDTH};
+
     explicit Impl();
     ~Impl() override;
+
+    void freeSolverObjects();
 
     void populate(libsedml::SedAlgorithm *pAlgorithm) override;
 

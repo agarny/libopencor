@@ -35,6 +35,11 @@ def test_no_file():
     assert_issues(instance, expected_issues)
     assert instance.progress == 0.0
 
+    # Make sure that the issues are still present after "running" the instance.
+
+    assert instance.run() == 0.0
+    assert_issues(instance, expected_issues)
+
 
 def test_invalid_cellml_file():
     expected_issues = [

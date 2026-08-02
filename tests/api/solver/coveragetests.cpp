@@ -18,7 +18,10 @@ limitations under the License.
 
 #include "tests/utils.h"
 
+#include <array>
 #include <libopencor>
+#include <span>
+#include <vector>
 
 TEST(CoverageSolverTest, odeChanges)
 {
@@ -80,4 +83,102 @@ TEST(CoverageSolverTest, algebraicChanges)
     EXPECT_NEAR(instanceTask->algebraicVariable(0)[0], -28.14815, ABS_TOL);
     EXPECT_NEAR(instanceTask->algebraicVariable(1)[0], -13.18519, ABS_TOL);
     EXPECT_NEAR(instanceTask->algebraicVariable(2)[0], 33.33333, ABS_TOL);
+}
+
+namespace {
+
+const auto FIRST_TARGET {1.0};
+const auto SECOND_TARGET {2.0};
+const auto THIRD_TARGET {3.0};
+
+struct KinsolSolveData
+{
+    std::vector<double> targets;
+};
+
+void computeObjectiveFunction(double *pU, double *pF, void *pUserData) // NOLINT
+{
+    const auto &targets {static_cast<const KinsolSolveData *>(pUserData)->targets};
+    const std::span<double> f {pF, targets.size()};
+    const std::span<const double> u {pU, targets.size()};
+
+    for (size_t i {0}; i < targets.size(); ++i) {
+        f[i] = u[i] - targets[i];
+    }
+}
+
+void expectKinsolSolveSolution(std::span<const double> pU, const std::vector<double> &pExpected)
+{
+    static const auto ABS_TOL {1e-05};
+
+    for (size_t i {0}; i < pExpected.size(); ++i) {
+        EXPECT_NEAR(pU[i], pExpected[i], ABS_TOL); // NOLINT
+    }
+}
+
+} // namespace
+
+TEST(CoverageSolverTest, kinsolSolveWithChangedSettings)
+{
+    // Solve different NLA systems (both in terms of size and settings) using the same solver instance to make sure that
+    // the underlying KINSOL objects are (re)created as needed.
+
+    auto solver {libOpenCOR::SolverKinsol::create()};
+
+    // Solve our first NLA system (2 unknowns) using the default settings: create the KINSOL objects.
+
+    KinsolSolveData data2 {{FIRST_TARGET, SECOND_TARGET}};
+    std::array<double, 2> u2 {0.0, 0.0};
+
+    EXPECT_TRUE(solver->solve(computeObjectiveFunction, u2.data(), 2, &data2));
+
+    expectKinsolSolveSolution(u2, data2.targets);
+
+    // Solve our first NLA system again, using the same settings: reuse the KINSOL objects.
+
+    std::array<double, 2> u2b {0.0, 0.0};
+
+    EXPECT_TRUE(solver->solve(computeObjectiveFunction, u2b.data(), 2, &data2));
+
+    expectKinsolSolveSolution(u2b, data2.targets);
+
+    // Solve our second NLA system (3 unknowns), still using the default settings: the size of our NLA system has
+    // changed: recreate the KINSOL objects.
+
+    KinsolSolveData data3 {{FIRST_TARGET, SECOND_TARGET, THIRD_TARGET}};
+    std::array<double, 3> u3 {0.0, 0.0, 0.0};
+
+    EXPECT_TRUE(solver->solve(computeObjectiveFunction, u3.data(), 3, &data3));
+
+    expectKinsolSolveSolution(u3, data3.targets);
+
+    // Solve our second NLA system with a different linear solver: recreate the KINSOL objects.
+
+    solver->setLinearSolver(libOpenCOR::SolverKinsol::LinearSolver::GMRES);
+
+    std::array<double, 3> u3b {0.0, 0.0, 0.0};
+
+    EXPECT_TRUE(solver->solve(computeObjectiveFunction, u3b.data(), 3, &data3));
+
+    expectKinsolSolveSolution(u3b, data3.targets);
+
+    // Solve our second NLA system with a different upper half-bandwidth: recreate the KINSOL objects.
+
+    solver->setUpperHalfBandwidth(1);
+
+    std::array<double, 3> u3c {0.0, 0.0, 0.0};
+
+    EXPECT_TRUE(solver->solve(computeObjectiveFunction, u3c.data(), 3, &data3));
+
+    expectKinsolSolveSolution(u3c, data3.targets);
+
+    // Solve our second NLA system with a different lower half-bandwidth: recreate the KINSOL objects.
+
+    solver->setLowerHalfBandwidth(2);
+
+    std::array<double, 3> u3d {0.0, 0.0, 0.0};
+
+    EXPECT_TRUE(solver->solve(computeObjectiveFunction, u3d.data(), 3, &data3));
+
+    expectKinsolSolveSolution(u3d, data3.targets);
 }

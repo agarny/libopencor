@@ -25,6 +25,7 @@ limitations under the License.
 #include "sunlinsol/sunlinsol_spgmr.h"
 #include "sunlinsol/sunlinsol_sptfqmr.h"
 
+#include <unordered_map>
 #include <utility>
 
 namespace libOpenCOR {
@@ -52,7 +53,6 @@ std::string toString(SolverKinsol::LinearSolver pLinearSolver)
 
 namespace {
 
-#ifndef CODE_COVERAGE_ENABLED
 void errorHandler(int pLine, const char *pFunction, const char *pFile, const char *pErrorMessage, SUNErrCode pErrorCode,
                   void *pUserData, SUNContext pSunContext)
 {
@@ -61,10 +61,25 @@ void errorHandler(int pLine, const char *pFunction, const char *pFile, const cha
     (void)pFile;
     (void)pSunContext;
 
+#ifdef CODE_COVERAGE_ENABLED
+    (void)pErrorCode;
+#else
     if (pErrorCode != KIN_WARNING) {
-        *static_cast<std::string *>(pUserData) = pErrorMessage;
-    }
+#endif
+    *static_cast<std::string *>(pUserData) = pErrorMessage;
+#ifndef CODE_COVERAGE_ENABLED
 }
+#endif
+}
+
+#ifdef __EMSCRIPTEN__
+// The objective-function table slots cached in sObjectiveFunctionSlots are only valid for the runtime that is currently
+// initialised on the current thread. Each worker lazily creates its own WebAssembly instance and installs its exported
+// functions at potentially different table slot offsets (see sWasmFunctionBase in cellmlfileruntime.cpp), so the
+// cached slots from one thread are meaningless on another. The cache is cleared at the start of each solve() because
+// the WebAssembly instance is recreated between solver invocations, invalidating the previously resolved slots.
+
+thread_local std::unordered_map<intptr_t, intptr_t> sObjectiveFunctionSlots; // NOLINT
 #endif
 
 struct SolverKinsolUserData
@@ -72,7 +87,7 @@ struct SolverKinsolUserData
 #ifdef __EMSCRIPTEN__
     intptr_t computeObjectiveFunctionIndex {0};
 #else
-    SolverNla::ComputeObjectiveFunction computeObjectiveFunction {nullptr};
+        SolverNla::ComputeObjectiveFunction computeObjectiveFunction {nullptr};
 #endif
 
     void *userData {nullptr};
@@ -95,12 +110,24 @@ int computeObjectiveFunction(N_Vector pU, N_Vector pF, void *pUserData)
     }
 
 #ifdef __EMSCRIPTEN__
-    // clang-format off
-    EM_ASM({
-        globalThis.runtime.computeObjectiveFunctions[$0]($1, $2, $3);
-    }, userData->computeObjectiveFunctionIndex, N_VGetArrayPointer_Serial(pU), N_VGetArrayPointer_Serial(pF), userData->userData); // clang-format on
+    // Resolve the WebAssembly table slot of our objective function, if needed, and call it.
+    // Note: the objective-function table slots cached in sObjectiveFunctionSlots are only valid for the runtime that is
+    //       currently initialised on the current thread, so resolve them (once per solve) from globalThis.runtime.
+
+    auto slotIt {sObjectiveFunctionSlots.find(userData->computeObjectiveFunctionIndex)};
+
+    if (slotIt == sObjectiveFunctionSlots.end()) {
+        // clang-format off
+        auto slot {EM_ASM_INT({
+            return globalThis.runtime.computeObjectiveFunctionSlots[$0] | 0;
+        }, userData->computeObjectiveFunctionIndex)}; // clang-format on
+
+        slotIt = sObjectiveFunctionSlots.emplace(userData->computeObjectiveFunctionIndex, slot).first;
+    }
+
+    reinterpret_cast<SolverNla::ComputeObjectiveFunction>(slotIt->second)(N_VGetArrayPointer_Serial(pU), N_VGetArrayPointer_Serial(pF), userData->userData);
 #else
-    userData->computeObjectiveFunction(N_VGetArrayPointer_Serial(pU), N_VGetArrayPointer_Serial(pF), userData->userData);
+        userData->computeObjectiveFunction(N_VGetArrayPointer_Serial(pU), N_VGetArrayPointer_Serial(pF), userData->userData);
 #endif
 
     return 0;
@@ -118,7 +145,24 @@ SolverKinsol::Impl::Impl()
 SolverKinsol::Impl::~Impl()
 {
     if (mSunContext != nullptr) {
+        freeSolverObjects();
+
         SUNContext_Free(&mSunContext);
+    }
+}
+
+void SolverKinsol::Impl::freeSolverObjects()
+{
+    if (mSolver != nullptr) {
+        N_VDestroy_Serial(mU);
+        N_VDestroy_Serial(mOnes);
+
+        SUNMatDestroy(mSunMatrix);
+        SUNLinSolFree(mSunLinearSolver);
+
+        KINFree(&mSolver);
+
+        SUNContext_PopErrHandler(mSunContext);
     }
 }
 
@@ -310,6 +354,12 @@ bool SolverKinsol::Impl::solve(intptr_t pComputeObjectiveFunctionIndex, double *
 bool SolverKinsol::Impl::solve(ComputeObjectiveFunction pComputeObjectiveFunction, double *pU, size_t pN, void *pUserData)
 #endif
 {
+#ifdef __EMSCRIPTEN__
+    // Clear our cache of the WebAssembly table slots of our objective functions.
+
+    sObjectiveFunctionSlots.clear();
+#endif
+
     removeAllIssues();
 
     // We don't have any data associated with the given objective function, so get some by first making sure that the
@@ -382,65 +432,91 @@ bool SolverKinsol::Impl::solve(ComputeObjectiveFunction pComputeObjectiveFunctio
         ASSERT_EQ(SUNContext_Create(SUN_COMM_NULL, &mSunContext), 0);
     }
 
-    // Create our KINSOL solver.
+    // (Re)create our KINSOL solver and its associated objects if we have never created them, if the size of the NLA
+    // system has changed, or if the linear solver settings have changed. Otherwise, reuse them since creating them is
+    // expensive.
 
-    auto *solver {KINCreate(mSunContext)};
+    if ((mSolver == nullptr)
+        || (mCachedN != pN)
+        || (mCachedLinearSolver != mLinearSolver)
+        || (mCachedUpperHalfBandwidth != mUpperHalfBandwidth)
+        || (mCachedLowerHalfBandwidth != mLowerHalfBandwidth)) {
+        // Free our current KINSOL objects, if any.
 
-    ASSERT_NE(solver, nullptr);
+        freeSolverObjects();
 
-    // Use our own error handler and disable the logger.
+        // Create our KINSOL solver.
 
-#ifndef CODE_COVERAGE_ENABLED
-    ASSERT_EQ(SUNContext_PushErrHandler(mSunContext, errorHandler, &mErrorMessage), KIN_SUCCESS);
-    ASSERT_EQ(SUNContext_SetLogger(mSunContext, nullptr), KIN_SUCCESS);
-#endif
+        mSolver = KINCreate(mSunContext);
 
-    // Initialise our KINSOL solver.
+        ASSERT_NE(mSolver, nullptr);
 
-    auto *u {N_VMake_Serial(static_cast<int64_t>(pN), pU, mSunContext)};
-    auto *ones {N_VNew_Serial(static_cast<int64_t>(pN), mSunContext)};
+        // Use our own error handler and disable the logger.
 
-    ASSERT_NE(u, nullptr);
-    ASSERT_NE(ones, nullptr);
+        ASSERT_EQ(SUNContext_PushErrHandler(mSunContext, errorHandler, &mErrorMessage), KIN_SUCCESS);
+        ASSERT_EQ(SUNContext_SetLogger(mSunContext, nullptr), KIN_SUCCESS);
 
-    N_VConst(1.0, ones);
+        // Initialise our KINSOL solver.
 
-    ASSERT_EQ(KINInit(solver, computeObjectiveFunction, u), KIN_SUCCESS);
+        mU = N_VMake_Serial(static_cast<int64_t>(pN), pU, mSunContext);
+        mOnes = N_VNew_Serial(static_cast<int64_t>(pN), mSunContext);
 
-    // Set our linear solver.
+        ASSERT_NE(mU, nullptr);
+        ASSERT_NE(mOnes, nullptr);
 
-    SUNMatrix sunMatrix {nullptr};
-    SUNLinearSolver sunLinearSolver {nullptr};
+        ASSERT_EQ(KINInit(mSolver, computeObjectiveFunction, mU), KIN_SUCCESS);
 
-    if (mLinearSolver == LinearSolver::DENSE) {
-        sunMatrix = SUNDenseMatrix(static_cast<int64_t>(pN), static_cast<int64_t>(pN), mSunContext);
+        // Set our linear solver.
 
-        ASSERT_NE(sunMatrix, nullptr);
+        if (mLinearSolver == LinearSolver::DENSE) {
+            mSunMatrix = SUNDenseMatrix(static_cast<int64_t>(pN), static_cast<int64_t>(pN), mSunContext);
 
-        sunLinearSolver = SUNLinSol_Dense(u, sunMatrix, mSunContext);
-    } else if (mLinearSolver == LinearSolver::BANDED) {
-        sunMatrix = SUNBandMatrix(static_cast<int64_t>(pN),
-                                  static_cast<int64_t>(mUpperHalfBandwidth), static_cast<int64_t>(mLowerHalfBandwidth),
-                                  mSunContext);
+            ASSERT_NE(mSunMatrix, nullptr);
 
-        ASSERT_NE(sunMatrix, nullptr);
+            mSunLinearSolver = SUNLinSol_Dense(mU, mSunMatrix, mSunContext);
+        } else if (mLinearSolver == LinearSolver::BANDED) {
+            mSunMatrix = SUNBandMatrix(static_cast<int64_t>(pN),
+                                       static_cast<int64_t>(mUpperHalfBandwidth), static_cast<int64_t>(mLowerHalfBandwidth),
+                                       mSunContext);
 
-        sunLinearSolver = SUNLinSol_Band(u, sunMatrix, mSunContext);
-    } else {
-        sunMatrix = nullptr;
+            ASSERT_NE(mSunMatrix, nullptr);
 
-        if (mLinearSolver == LinearSolver::GMRES) {
-            sunLinearSolver = SUNLinSol_SPGMR(u, SUN_PREC_NONE, 0, mSunContext);
-        } else if (mLinearSolver == LinearSolver::BICGSTAB) {
-            sunLinearSolver = SUNLinSol_SPBCGS(u, SUN_PREC_NONE, 0, mSunContext);
+            mSunLinearSolver = SUNLinSol_Band(mU, mSunMatrix, mSunContext);
         } else {
-            sunLinearSolver = SUNLinSol_SPTFQMR(u, SUN_PREC_NONE, 0, mSunContext);
+            mSunMatrix = nullptr;
+
+            if (mLinearSolver == LinearSolver::GMRES) {
+                mSunLinearSolver = SUNLinSol_SPGMR(mU, SUN_PREC_NONE, 0, mSunContext);
+            } else if (mLinearSolver == LinearSolver::BICGSTAB) {
+                mSunLinearSolver = SUNLinSol_SPBCGS(mU, SUN_PREC_NONE, 0, mSunContext);
+            } else {
+                mSunLinearSolver = SUNLinSol_SPTFQMR(mU, SUN_PREC_NONE, 0, mSunContext);
+            }
         }
+
+        ASSERT_NE(mSunLinearSolver, nullptr);
+
+        ASSERT_EQ(KINSetLinearSolver(mSolver, mSunLinearSolver, mSunMatrix), KINLS_SUCCESS);
+
+        // Keep track of what our KINSOL objects are associated with.
+
+        mCachedN = pN;
+        mCachedU = pU;
+        mCachedLinearSolver = mLinearSolver;
+        mCachedUpperHalfBandwidth = mUpperHalfBandwidth;
+        mCachedLowerHalfBandwidth = mLowerHalfBandwidth;
+    } else if (mCachedU != pU) {
+        // The NLA system is the same size, but the solution vector differs, so recreate a thin wrapper around it.
+        // Note: N_VMake_Serial() doesn't allocate any data, unlike N_VNew_Serial(), so this is cheap.
+
+        N_VDestroy_Serial(mU);
+
+        mU = N_VMake_Serial(static_cast<int64_t>(pN), pU, mSunContext);
+
+        ASSERT_NE(mU, nullptr);
+
+        mCachedU = pU;
     }
-
-    ASSERT_NE(sunLinearSolver, nullptr);
-
-    ASSERT_EQ(KINSetLinearSolver(solver, sunLinearSolver, sunMatrix), KINLS_SUCCESS);
 
     // Set our user data.
 
@@ -453,39 +529,26 @@ bool SolverKinsol::Impl::solve(ComputeObjectiveFunction pComputeObjectiveFunctio
 #endif
     userData.userData = pUserData;
 
-    ASSERT_EQ(KINSetUserData(solver, &userData), KIN_SUCCESS);
+    ASSERT_EQ(KINSetUserData(mSolver, &userData), KIN_SUCCESS);
 
     // Set our maximum number of iterations.
 
-    ASSERT_EQ(KINSetNumMaxIters(solver, mMaximumNumberOfIterations), KIN_SUCCESS);
+    ASSERT_EQ(KINSetNumMaxIters(mSolver, mMaximumNumberOfIterations), KIN_SUCCESS);
 
     // Solve the model.
 
-    auto res = KINSol(solver, u, KIN_LINESEARCH, ones, ones);
+    N_VConst(1.0, mOnes);
 
-    // Release some memory, but keep the SUNContext cached for reuse.
-
-    N_VDestroy_Serial(u);
-    N_VDestroy_Serial(ones);
-    SUNMatDestroy(sunMatrix);
-    SUNLinSolFree(sunLinearSolver);
-
-    KINFree(&solver);
-
-    SUNContext_PopErrHandler(mSunContext);
+    auto res = KINSol(mSolver, mU, KIN_LINESEARCH, mOnes, mOnes);
 
     // Check whether everything went fine.
 
     if (res < KIN_SUCCESS) {
-#ifndef CODE_COVERAGE_ENABLED
         if (userData.infOrNanFound) {
-#endif
             addError("The NLA system could not be solved (it contains some Inf and/or NaN values).");
-#ifndef CODE_COVERAGE_ENABLED
         } else {
             addError(mErrorMessage);
         }
-#endif
 
         return false;
     }

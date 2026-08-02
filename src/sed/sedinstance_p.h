@@ -31,7 +31,10 @@ class SedInstance::Impl: public Logger::Impl
 {
 public:
     SedInstanceTaskPtrs mTasks;
+
     IssuePtrs mTasksIssues;
+    IssuePtrs mTasksErrors;
+    IssuePtrs mTasksWarnings;
 
     mutable std::atomic<bool> mRunning {false};
     mutable std::mutex mRunMutex;

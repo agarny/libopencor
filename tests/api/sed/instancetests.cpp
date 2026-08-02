@@ -33,6 +33,11 @@ TEST(InstanceSedTest, noFile)
 
     EXPECT_EQ_ISSUES(instance, EXPECTED_ISSUES);
     EXPECT_DOUBLE_EQ(instance->progress(), 0.0);
+
+    // Make sure that the issues are still present after "running" the instance.
+
+    EXPECT_DOUBLE_EQ(instance->run(), 0.0);
+    EXPECT_EQ_ISSUES(instance, EXPECTED_ISSUES);
 }
 
 TEST(InstanceSedTest, invalidCellmlFile)

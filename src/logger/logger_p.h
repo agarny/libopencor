@@ -22,6 +22,7 @@ limitations under the License.
 #include "libopencor/issue.h"
 #include "libopencor/logger.h"
 
+#include <atomic>
 #include <mutex>
 
 namespace libOpenCOR {
@@ -29,12 +30,22 @@ namespace libOpenCOR {
 class Logger::Impl
 {
 public:
-    mutable std::recursive_mutex mMutex;
+    mutable std::mutex mMutex;
 
     IssuePtrs mIssues;
-
     IssuePtrs mErrors;
     IssuePtrs mWarnings;
+
+    // Note: we use atomic variables for the issue counts so that they can be read without locking the mutex, which is
+    //       otherwise needed to access the issue vectors themselves. This is because the issue counts can be read
+    //       frequently during a simulation and we want to avoid the overhead of locking the mutex. To ensure that a
+    //       reader never sees an updated count before the corresponding issue vectors have been updated, the counts are
+    //       written with std::memory_order_release and read with std::memory_order_acquire. The vectors themselves are
+    //       still protected by the mutex.
+
+    std::atomic<size_t> mIssueCount {0};
+    std::atomic<size_t> mErrorCount {0};
+    std::atomic<size_t> mWarningCount {0};
 
     virtual ~Impl() = default;
 
@@ -57,7 +68,6 @@ public:
     void addIssues(const libcellml::LoggerPtr &pLogger, const std::string &pContext);
 
     void addIssue(Issue::Type pType, const std::string &pDescription, const std::string &pContext = "");
-
     void addError(const std::string &pDescription);
     void addWarning(const std::string &pDescription);
 

@@ -315,13 +315,16 @@ CellmlFileRuntime::Impl::~Impl()
     cleanupWorkerWasm();
 }
 
-// Lazily create a WebAssembly.Module + Instance in the current worker's private JavaScript scope, so dispatch methods
-// can call the CellML-generated functions directly on the worker thread.
+// Lazily create a WebAssembly.Module + Instance in the current thread's private JavaScript scope and install its
+// exported functions into the current thread's WebAssembly table, so C++ can call them directly through function
+// pointers without any JavaScript round trip. If the current thread has already been initialised (see
+// wasmFunctionBase), then reuse its existing table slots rather than grow the table again, which would otherwise
+// both grow the table unboundedly and keep previously created WebAssembly instances alive forever.
 
 // clang-format off
-EM_JS(void, initialiseWorkerWasmJS, (const void* wasmBytesPtr, size_t wasmBytesSize), {
-    // Create a WebAssembly.Module + Instance in the current worker's private JavaScript scope, so dispatch methods can
-    // call the CellML-generated functions directly on the worker thread.
+EM_JS(int, initialiseWorkerWasmJS, (const void* wasmBytesPtr, size_t wasmBytesSize, int wasmFunctionBase), {
+    // Create a WebAssembly.Module + Instance in the current thread's private JavaScript scope, so C++ can call its
+    // exported functions directly through the current thread's WebAssembly table.
 
     const wasmBytes = new Uint8Array(HEAPU8.buffer, wasmBytesPtr, wasmBytesSize);
     const wasmModule = new WebAssembly.Module(wasmBytes);
@@ -376,38 +379,85 @@ EM_JS(void, initialiseWorkerWasmJS, (const void* wasmBytesPtr, size_t wasmBytesS
         }
     });
     const exports = wasmInstance.exports;
-    const runtime = {
-        initialiseArrays: exports.initialiseArrays,
-        computeComputedConstants: exports.computeComputedConstants,
-        computeRates: exports.computeRates,
-        computeVariables: exports.computeVariables,
-        computeObjectiveFunctions: {},
-        computeObjectiveFunctionCount: 0
-    };
+
+    // Install the exported functions into the shared WebAssembly table (i.e. the main module's table, so C++ can call
+    // them), in an order known to our getters:
+    //   - Slot 0: initialiseArrays();
+    //   - Slot 1: computeComputedConstants();
+    //   - Slot 2: computeRates() (only exported by differential models, so the slot is left empty otherwise); and
+    //   - Slot 3: computeVariables().
+
+    const functionNames = ["initialiseArrays", "computeComputedConstants", "computeRates", "computeVariables"];
+    const objectiveFunctionNames = [];
 
     for (const key in exports) {
         if (key.indexOf("objectiveFunction") === 0) {
-            runtime.computeObjectiveFunctions[parseInt(key.substring(17), 10)] = exports[key];
-
-            ++runtime.computeObjectiveFunctionCount;
+            objectiveFunctionNames.push(key);
         }
     }
 
-    globalThis.runtime = runtime;
+    // Reuse our existing table slots if the current thread has already been initialised, otherwise grow the table (and
+    // only grow it further should more slots be needed than were previously allocated).
 
-    // Cache the function references on Module to avoid property lookups through globalThis.runtime on every call from
-    // the EM_JS trampolines.
+    const functionCount = functionNames.length + objectiveFunctionNames.length;
+    let base = wasmFunctionBase;
 
-    Module.initialiseArrays = runtime.initialiseArrays;
-    Module.computeComputedConstants = runtime.computeComputedConstants;
-    Module.computeRates = runtime.computeRates;
-    Module.computeVariables = runtime.computeVariables;
-    Module.computeObjectiveFunctions = runtime.computeObjectiveFunctions;
+    if (base === 0) {
+        base = wasmTable.grow(functionCount);
+    } else if (base + functionCount > wasmTable.length) {
+        wasmTable.grow(base + functionCount - wasmTable.length);
+    }
+
+    for (let i = 0; i < functionNames.length; ++i) {
+        const func = exports[functionNames[i]];
+
+        if (func !== undefined) {
+            wasmTable.set(base + i, func);
+        }
+    }
+
+    // Do the same for our various objective functions, recording their table slots by NLA system index, so that C++
+    // can resolve them without any JavaScript round trip.
+
+    const computeObjectiveFunctionSlots = {};
+    let slot = base + functionNames.length;
+
+    for (const key of objectiveFunctionNames) {
+        wasmTable.set(slot, exports[key]);
+
+        computeObjectiveFunctionSlots[parseInt(key.substring(17), 10)] = slot;
+
+        ++slot;
+    }
+
+    // Keep a small per-thread runtime record so that the generated code can resolve the NLA solver address and C++
+    // can resolve objective-function table slots.
+
+    globalThis.runtime = {
+        nlaSolverAddress: 0,
+        computeObjectiveFunctionSlots
+    };
+
+    return base;
 }); // clang-format on
+
+// The base index, in the current thread's WebAssembly table, of the current thread's runtime functions (each thread
+// lazily creates its own WebAssembly instance, see initialiseWorkerWasmJS()). This is thread-local since the table
+// slots are only valid on the thread on which they were installed, and it persists across re-initialisations on that
+// thread so that its table slots can be reused (see the wasmFunctionBase parameter of initialiseWorkerWasmJS()).
+// Note: the function pointers returned by computeRates(), initialiseArraysForDifferentialModel(), etc. are computed
+//       from this thread-local base. They must only be called from the current thread (calling them from a different
+//       thread, which has its own WebAssembly instance with different table slots, will silently execute the wrong
+//       code). Solvers that cache these function pointers (see SolverOde::mComputeRates and
+//       SolverCvodeUserData::computeRates) inherit this thread-affinity constraint.
+
+namespace {
+thread_local int sWasmFunctionBase = 0; // NOLINT
+} // namespace
 
 void CellmlFileRuntime::Impl::initialiseWorkerWasm() const
 {
-    initialiseWorkerWasmJS(mWasmModule.data(), mWasmModule.size());
+    sWasmFunctionBase = initialiseWorkerWasmJS(mWasmModule.data(), mWasmModule.size(), sWasmFunctionBase);
 }
 
 void CellmlFileRuntime::Impl::cleanupWorkerWasm() const
@@ -426,74 +476,50 @@ void CellmlFileRuntime::Impl::setNlaSolverAddress(uintptr_t pAddress) const
     }, pAddress); // clang-format on
 }
 
-// clang-format off
-EM_JS(void, initialiseArraysForAlgebraicModelJS, (const void* constants, const void* computedConstants, const void* algebraicVariables), {
-    Module.initialiseArrays(constants, computedConstants, algebraicVariables);
-}); // clang-format on
+// The table slot offsets of the functions of our WebAssembly instances (see initialiseWorkerWasmJS()):
+//   - Slot 0: initialiseArrays();
+//   - Slot 1: computeComputedConstants();
+//   - Slot 2: computeRates() (differential models only); and
+//   - Slot 3: computeVariables().
 
-void CellmlFileRuntime::Impl::initialiseArraysForAlgebraicModel(double *pConstants, double *pComputedConstants, double *pAlgebraicVariables) const
+static constexpr intptr_t INITIALISE_ARRAYS_TABLE_OFFSET = 0;
+static constexpr intptr_t COMPUTE_COMPUTED_CONSTANTS_TABLE_OFFSET = 1;
+static constexpr intptr_t COMPUTE_RATES_TABLE_OFFSET = 2;
+static constexpr intptr_t COMPUTE_VARIABLES_TABLE_OFFSET = 3;
+
+CellmlFileRuntime::InitialiseArraysForAlgebraicModel CellmlFileRuntime::Impl::initialiseArraysForAlgebraicModel() const
 {
-    initialiseArraysForAlgebraicModelJS(pConstants, pComputedConstants, pAlgebraicVariables);
+    return reinterpret_cast<InitialiseArraysForAlgebraicModel>(sWasmFunctionBase + INITIALISE_ARRAYS_TABLE_OFFSET);
 }
 
-// clang-format off
-EM_JS(void, initialiseArraysForDifferentialModelJS, (const void* states, const void* rates, const void* constants, const void* computedConstants, const void* algebraicVariables), {
-    Module.initialiseArrays(states, rates, constants, computedConstants, algebraicVariables);
-}); // clang-format on
-
-void CellmlFileRuntime::Impl::initialiseArraysForDifferentialModel(double *pStates, double *pRates, double *pConstants, double *pComputedConstants, double *pAlgebraicVariables) const
+CellmlFileRuntime::InitialiseArraysForDifferentialModel CellmlFileRuntime::Impl::initialiseArraysForDifferentialModel() const
 {
-    initialiseArraysForDifferentialModelJS(pStates, pRates, pConstants, pComputedConstants, pAlgebraicVariables);
+    return reinterpret_cast<InitialiseArraysForDifferentialModel>(sWasmFunctionBase + INITIALISE_ARRAYS_TABLE_OFFSET);
 }
 
-// clang-format off
-EM_JS(void, computeComputedConstantsForAlgebraicModelJS, (const void* constants, const void* computedConstants, const void* algebraicVariables), {
-    Module.computeComputedConstants(constants, computedConstants, algebraicVariables);
-}); // clang-format on
-
-void CellmlFileRuntime::Impl::computeComputedConstantsForAlgebraicModel(double *pConstants, double *pComputedConstants, double *pAlgebraicVariables) const
+CellmlFileRuntime::ComputeComputedConstantsForAlgebraicModel CellmlFileRuntime::Impl::computeComputedConstantsForAlgebraicModel() const
 {
-    computeComputedConstantsForAlgebraicModelJS(pConstants, pComputedConstants, pAlgebraicVariables);
+    return reinterpret_cast<ComputeComputedConstantsForAlgebraicModel>(sWasmFunctionBase + COMPUTE_COMPUTED_CONSTANTS_TABLE_OFFSET);
 }
 
-// clang-format off
-EM_JS(void, computeComputedConstantsForDifferentialModelJS, (double voi, const void* states, const void* rates, const void* constants, const void* computedConstants, const void* algebraicVariables), {
-    Module.computeComputedConstants(voi, states, rates, constants, computedConstants, algebraicVariables);
-}); // clang-format on
-
-void CellmlFileRuntime::Impl::computeComputedConstantsForDifferentialModel(double pVoi, double *pStates, double *pRates, double *pConstants, double *pComputedConstants, double *pAlgebraicVariables) const
+CellmlFileRuntime::ComputeComputedConstantsForDifferentialModel CellmlFileRuntime::Impl::computeComputedConstantsForDifferentialModel() const
 {
-    computeComputedConstantsForDifferentialModelJS(pVoi, pStates, pRates, pConstants, pComputedConstants, pAlgebraicVariables);
+    return reinterpret_cast<ComputeComputedConstantsForDifferentialModel>(sWasmFunctionBase + COMPUTE_COMPUTED_CONSTANTS_TABLE_OFFSET);
 }
 
-// clang-format off
-EM_JS(void, computeRatesJS, (double voi, const void* states, const void* rates, const void* constants, const void* computedConstants, const void* algebraicVariables), {
-    Module.computeRates(voi, states, rates, constants, computedConstants, algebraicVariables);
-}); // clang-format on
-
-void CellmlFileRuntime::Impl::computeRates(double pVoi, double *pStates, double *pRates, double *pConstants, double *pComputedConstants, double *pAlgebraicVariables) const
+CellmlFileRuntime::ComputeRates CellmlFileRuntime::Impl::computeRates() const
 {
-    computeRatesJS(pVoi, pStates, pRates, pConstants, pComputedConstants, pAlgebraicVariables);
+    return reinterpret_cast<ComputeRates>(sWasmFunctionBase + COMPUTE_RATES_TABLE_OFFSET);
 }
 
-// clang-format off
-EM_JS(void, computeVariablesForAlgebraicModelJS, (const void* constants, const void* computedConstants, const void* algebraicVariables), {
-    Module.computeVariables(constants, computedConstants, algebraicVariables);
-}); // clang-format on
-
-void CellmlFileRuntime::Impl::computeVariablesForAlgebraicModel(double *pConstants, double *pComputedConstants, double *pAlgebraicVariables) const
+CellmlFileRuntime::ComputeVariablesForAlgebraicModel CellmlFileRuntime::Impl::computeVariablesForAlgebraicModel() const
 {
-    computeVariablesForAlgebraicModelJS(pConstants, pComputedConstants, pAlgebraicVariables);
+    return reinterpret_cast<ComputeVariablesForAlgebraicModel>(sWasmFunctionBase + COMPUTE_VARIABLES_TABLE_OFFSET);
 }
 
-// clang-format off
-EM_JS(void, computeVariablesForDifferentialModelJS, (double voi, const void* states, const void* rates, const void* constants, const void* computedConstants, const void* algebraicVariables), {
-    Module.computeVariables(voi, states, rates, constants, computedConstants, algebraicVariables);
-}); // clang-format on
-
-void CellmlFileRuntime::Impl::computeVariablesForDifferentialModel(double pVoi, double *pStates, double *pRates, double *pConstants, double *pComputedConstants, double *pAlgebraicVariables) const
+CellmlFileRuntime::ComputeVariablesForDifferentialModel CellmlFileRuntime::Impl::computeVariablesForDifferentialModel() const
 {
-    computeVariablesForDifferentialModelJS(pVoi, pStates, pRates, pConstants, pComputedConstants, pAlgebraicVariables);
+    return reinterpret_cast<ComputeVariablesForDifferentialModel>(sWasmFunctionBase + COMPUTE_VARIABLES_TABLE_OFFSET);
 }
 #else
 CellmlFileRuntime::InitialiseArraysForAlgebraicModel CellmlFileRuntime::Impl::initialiseArraysForAlgebraicModel() const
@@ -572,42 +598,8 @@ void CellmlFileRuntime::setNlaSolverAddress(uintptr_t pAddress) const
 {
     pimpl()->setNlaSolverAddress(pAddress);
 }
+#endif
 
-void CellmlFileRuntime::initialiseArraysForAlgebraicModel(double *pConstants, double *pComputedConstants, double *pAlgebraicVariables) const
-{
-    pimpl()->initialiseArraysForAlgebraicModel(pConstants, pComputedConstants, pAlgebraicVariables);
-}
-
-void CellmlFileRuntime::initialiseArraysForDifferentialModel(double *pStates, double *pRates, double *pConstants, double *pComputedConstants, double *pAlgebraicVariables) const
-{
-    pimpl()->initialiseArraysForDifferentialModel(pStates, pRates, pConstants, pComputedConstants, pAlgebraicVariables);
-}
-
-void CellmlFileRuntime::computeComputedConstantsForAlgebraicModel(double *pConstants, double *pComputedConstants, double *pAlgebraicVariables) const
-{
-    pimpl()->computeComputedConstantsForAlgebraicModel(pConstants, pComputedConstants, pAlgebraicVariables);
-}
-
-void CellmlFileRuntime::computeComputedConstantsForDifferentialModel(double pVoi, double *pStates, double *pRates, double *pConstants, double *pComputedConstants, double *pAlgebraicVariables) const
-{
-    pimpl()->computeComputedConstantsForDifferentialModel(pVoi, pStates, pRates, pConstants, pComputedConstants, pAlgebraicVariables);
-}
-
-void CellmlFileRuntime::computeRates(double pVoi, double *pStates, double *pRates, double *pConstants, double *pComputedConstants, double *pAlgebraicVariables) const
-{
-    pimpl()->computeRates(pVoi, pStates, pRates, pConstants, pComputedConstants, pAlgebraicVariables);
-}
-
-void CellmlFileRuntime::computeVariablesForAlgebraicModel(double *pConstants, double *pComputedConstants, double *pAlgebraicVariables) const
-{
-    pimpl()->computeVariablesForAlgebraicModel(pConstants, pComputedConstants, pAlgebraicVariables);
-}
-
-void CellmlFileRuntime::computeVariablesForDifferentialModel(double pVoi, double *pStates, double *pRates, double *pConstants, double *pComputedConstants, double *pAlgebraicVariables) const
-{
-    pimpl()->computeVariablesForDifferentialModel(pVoi, pStates, pRates, pConstants, pComputedConstants, pAlgebraicVariables);
-}
-#else
 CellmlFileRuntime::InitialiseArraysForAlgebraicModel CellmlFileRuntime::initialiseArraysForAlgebraicModel() const
 {
     return pimpl()->initialiseArraysForAlgebraicModel();
@@ -642,6 +634,5 @@ CellmlFileRuntime::ComputeVariablesForDifferentialModel CellmlFileRuntime::compu
 {
     return pimpl()->computeVariablesForDifferentialModel();
 }
-#endif
 
 } // namespace libOpenCOR

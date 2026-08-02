@@ -16,7 +16,7 @@ FOR /F "tokens=1-3 delims=." %%A IN ("!OldVersion!") DO (
 
 REM Determine the new version based on the current version and the current date.
 
-FOR /F "tokens=2 delims==" %%I IN ('wmic os get localdatetime /value') DO SET Now=%%I
+FOR /F "usebackq delims=" %%I IN (`powershell -NoProfile -Command "[System.TimeZoneInfo]::ConvertTimeBySystemTimeZoneId([System.DateTime]::UtcNow, 'New Zealand Standard Time').ToString('yyyyMMdd')"`) DO SET Now=%%I
 
 SET NewMajorVersion=!OldMajorVersion!
 SET NewMinorVersion=!Now:~0,8!
