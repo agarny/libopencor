@@ -15,7 +15,7 @@
 set(PACKAGE_NAME LLVMClang)
 set(PACKAGE_VERSION 22.1.8)
 set(PACKAGE_REPOSITORY llvm-project)
-set(RELEASE_TAG llvmorg-22.1.8-libopencor)
+set(RELEASE_TAG llvmorg-22.1.8)
 set(INSTALL_DIR ${PREBUILT_DIR}/${PACKAGE_NAME})
 
 # Either retrieve or build our package.
@@ -72,10 +72,12 @@ if(LIBOPENCOR_PREBUILT_LLVMCLANG)
     endif()
 elseif(NOT ONLY_BUILD_JAVASCRIPT_THIRD_PARTY_LIBRARIES)
     # Build our package.
+    # Note: libOpenCOR's WASM version doesn't use LLVM+Clang's typeinfo (e.g., the JIT parts of compiler.cpp are not
+    #       compiled for WebAssembly), so we can disable RTTI to reduce the size of our WASM package. On the other hand,
+    #       libOpenCOR's native versions do use LLVM+Clang's typeinfo (e.g., compiler.cpp instantiates LLVM+Clang
+    #       templates whose typeinfo references LLVM+Clang's own typeinfo), so we must enable RTTI for them.
 
     if(EMSCRIPTEN)
-        set(LIBCLANG_BUILD_STATIC OFF)
-
         set(LLVM_TARGETS_TO_BUILD WebAssembly)
         set(LLVM_HOST_TRIPLE wasm32-unknown-emscripten)
 
@@ -83,23 +85,10 @@ elseif(NOT ONLY_BUILD_JAVASCRIPT_THIRD_PARTY_LIBRARIES)
             -DLLVM_ENABLE_LIBCXX=ON
         )
 
-        find_program(LLVM_TBLGEN_EXE NAMES llvm-tblgen)
-        find_program(CLANG_TBLGEN_EXE NAMES clang-tblgen)
-
-        if(NOT LLVM_TBLGEN_EXE OR NOT CLANG_TBLGEN_EXE)
-            message(FATAL_ERROR "llvm-tblgen and clang-tblgen executables are required to build ${PACKAGE_NAME} with Emscripten.")
-        endif()
-
-        set(LLVM_TABLEGEN
-            -DLLVM_TABLEGEN=${LLVM_TBLGEN_EXE}
-        )
-
-        set(CLANG_TABLEGEN
-            -DCLANG_TABLEGEN=${CLANG_TBLGEN_EXE}
+        set(LLVM_ENABLE_RTTI
+            -DLLVM_ENABLE_RTTI=OFF
         )
     else()
-        set(LIBCLANG_BUILD_STATIC ON)
-
         if(INTEL_MODE)
             set(LLVM_TARGETS_TO_BUILD X86)
 
@@ -121,7 +110,27 @@ elseif(NOT ONLY_BUILD_JAVASCRIPT_THIRD_PARTY_LIBRARIES)
                 set(LLVM_HOST_TRIPLE aarch64-pc-linux-gnu)
             endif()
         endif()
+
+        set(LLVM_ENABLE_RTTI
+            -DLLVM_ENABLE_RTTI=ON
+        )
     endif()
+
+    # Build LLVM+Clang with size optimisation.
+    # Note: this doesn't affect the quality of the code that LLVM+Clang generates for us. It only affects its own size
+    #       and, to some extent, how fast it can compile code.
+
+    if(MSVC AND NOT EMSCRIPTEN)
+        set(LLVMCLANG_RELEASE_FLAGS "/O1 /DNDEBUG")
+    else()
+        set(LLVMCLANG_RELEASE_FLAGS "-Os -DNDEBUG")
+    endif()
+
+    # The patches to apply to LLVM+Clang.
+
+    file(GLOB_RECURSE LLVMCLANG_PATCH_FILES "${CMAKE_CURRENT_SOURCE_DIR}/patches/*.patch")
+
+    # Build LLVM+Clang.
 
     build_package(${PACKAGE_NAME}
         URL
@@ -129,20 +138,30 @@ elseif(NOT ONLY_BUILD_JAVASCRIPT_THIRD_PARTY_LIBRARIES)
         DOWNLOAD_NO_PROGRESS ON
         SOURCE_SUBDIR
             llvm
+        PATCH_COMMAND
+            ${CMAKE_COMMAND} -DLLVMCLANG_SOURCE_DIR=<SOURCE_DIR>
+                             -DLLVMCLANG_PATCH_FILES="${LLVMCLANG_PATCH_FILES}"
+                             -P ${CMAKE_CURRENT_SOURCE_DIR}/applypatches.cmake
         CMAKE_ARGS
             -DCLANG_BUILD_TOOLS=OFF
+            -DCLANG_ENABLE_INTERPRETER=OFF
             -DCLANG_ENABLE_LIBXML2=OFF
             -DCLANG_ENABLE_STATIC_ANALYZER=OFF
+            -DCLANG_ENABLE_TOOLING_LIBS=OFF
             -DCLANG_INCLUDE_DOCS=OFF
             -DCLANG_INCLUDE_TESTS=OFF
             -DCLANG_PLUGIN_SUPPORT=OFF
-            ${CLANG_TABLEGEN}
+            -DCLANG_TOOL_CLANG_DIFF_BUILD=OFF
+            -DCLANG_TOOL_CLANG_IMPORT_TEST_BUILD=OFF
+            -DCLANG_TOOL_CLANG_SHLIB_BUILD=OFF
             -DCLANG_TOOL_DICTIONARY_BUILD=OFF
             -DCLANG_TOOL_HANDLE_CXX_BUILD=OFF
             -DCLANG_TOOL_HANDLE_LLVM_BUILD=OFF
+            -DCLANG_TOOL_LIBCLANG_BUILD=OFF
             ${CMAKE_ARGS}
+            -DCMAKE_CXX_FLAGS_RELEASE=${LLVMCLANG_RELEASE_FLAGS}
+            -DCMAKE_C_FLAGS_RELEASE=${LLVMCLANG_RELEASE_FLAGS}
             -DCMAKE_INSTALL_PREFIX=${INSTALL_DIR}
-            -DLIBCLANG_BUILD_STATIC=${LIBCLANG_BUILD_STATIC}
             -DLLVM_BUILD_LLVM_C_DYLIB=OFF
             -DLLVM_BUILD_RUNTIME=OFF
             -DLLVM_BUILD_RUNTIMES=OFF
@@ -163,7 +182,7 @@ elseif(NOT ONLY_BUILD_JAVASCRIPT_THIRD_PARTY_LIBRARIES)
             -DLLVM_ENABLE_PEDANTIC=OFF
             -DLLVM_ENABLE_PLUGINS=OFF
             -DLLVM_ENABLE_PROJECTS=clang
-            -DLLVM_ENABLE_RTTI=ON
+            ${LLVM_ENABLE_RTTI}
             -DLLVM_ENABLE_TELEMETRY=OFF
             -DLLVM_ENABLE_UNWIND_TABLES=OFF
             -DLLVM_ENABLE_WARNINGS=OFF
@@ -177,8 +196,9 @@ elseif(NOT ONLY_BUILD_JAVASCRIPT_THIRD_PARTY_LIBRARIES)
             -DLLVM_INCLUDE_TESTS=OFF
             -DLLVM_INCLUDE_TOOLS=ON
             -DLLVM_INCLUDE_UTILS=OFF
-            ${LLVM_TABLEGEN}
             -DLLVM_TARGETS_TO_BUILD=${LLVM_TARGETS_TO_BUILD}
+            -DLLVM_TOOL_LTO_BUILD=OFF
+            -DLLVM_TOOL_REMARKS_SHLIB_BUILD=OFF
     )
 
     # Create our package.
@@ -192,8 +212,6 @@ elseif(NOT ONLY_BUILD_JAVASCRIPT_THIRD_PARTY_LIBRARIES)
         foreach(TABLEGEN_EXE ${TABLEGEN_EXES})
             file(COPY ${TABLEGEN_EXE} DESTINATION ${INSTALL_DIR}/bin)
         endforeach()
-
-        string(REPLACE "${TABLEGEN_EXES_BUILD_DIR}/" "" TABLEGEN_EXES "${TABLEGEN_EXES}")
     endif()
 
     create_package(${PACKAGE_NAME} ${PACKAGE_VERSION}
@@ -215,13 +233,11 @@ if(EMSCRIPTEN)
 else()
     if(INTEL_MODE)
         set(EXTRA_LLVMCLANG_LIBRARIES
-            LLVMExegesisX86
             LLVMX86AsmParser
             LLVMX86CodeGen
             LLVMX86Desc
             LLVMX86Disassembler
             LLVMX86Info
-            LLVMX86TargetMCA
         )
     else()
         set(EXTRA_LLVMCLANG_LIBRARIES
@@ -231,7 +247,6 @@ else()
             LLVMAArch64Disassembler
             LLVMAArch64Info
             LLVMAArch64Utils
-            LLVMExegesisAArch64
         )
     endif()
 endif()
