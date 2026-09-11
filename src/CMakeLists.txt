@@ -469,6 +469,18 @@ else()
 
         file(GLOB_RECURSE PACKAGES ${PREBUILT_DIR}/*${CMAKE_STATIC_LIBRARY_SUFFIX})
 
+        # Remove LLVM+Clang's libraries that we don't need (see LLVMCLANG_EXCLUDE_LIBRARIES in
+        # src/3rdparty/LLVMClang/CMakeLists.txt).
+message(">>> [OLD] PACKAGES: ${PACKAGES}")
+
+        foreach(LLVMCLANG_EXCLUDE_LIBRARY ${LLVMCLANG_EXCLUDE_LIBRARIES})
+            string(REPLACE "." "\\." LLVMCLANG_EXCLUDE_LIBRARY_REGEX
+                   "${CMAKE_STATIC_LIBRARY_PREFIX}${LLVMCLANG_EXCLUDE_LIBRARY}${CMAKE_STATIC_LIBRARY_SUFFIX}")
+
+            list(FILTER PACKAGES EXCLUDE REGEX "/LLVMClang/lib/${LLVMCLANG_EXCLUDE_LIBRARY_REGEX}$")
+        endforeach()
+message(">>> [NEW] PACKAGES: ${PACKAGES}")
+
         # Extract the object files from our various packages, handling duplicate object names.
 
         list(LENGTH PACKAGES PACKAGE_COUNT)

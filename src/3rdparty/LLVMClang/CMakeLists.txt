@@ -18,6 +18,86 @@ set(PACKAGE_REPOSITORY llvm-project)
 set(RELEASE_TAG llvmorg-22.1.8)
 set(INSTALL_DIR ${PREBUILT_DIR}/${PACKAGE_NAME})
 
+# The libraries that libOpenCOR doesn't need.
+# Note: they are only needed by the various LLVM+Clang tools and/or libclang, none of which we use. So, we don't want
+#       them to be part of our package, to be linked into libOpenCOR, or to be merged into its static version.
+
+set(LLVMCLANG_EXCLUDE_LIBRARIES
+    clangAnalysisFlowSensitive
+    clangAnalysisFlowSensitiveModels
+    clangAnalysisScalable
+    clangCrossTU
+    clangDependencyScanning
+    clangDirectoryWatcher
+    clangDynamicASTMatchers
+    clangExtractAPI
+    clangFormat
+    clangFrontendTool
+    clangIndex
+    clangIndexSerialization
+    clangInstallAPI
+    clangInterpreter
+    clangRewrite
+    clangRewriteFrontend
+    clangStaticAnalyzerCheckers
+    clangStaticAnalyzerCore
+    clangStaticAnalyzerFrontend
+    clangTooling
+    clangToolingASTDiff
+    clangToolingCore
+    clangToolingInclusions
+    clangToolingInclusionsStdlib
+    clangToolingRefactoring
+    clangToolingSyntax
+    clangTransformer
+    LLVMAArch64AsmParser
+    LLVMAArch64Disassembler
+    LLVMABI
+    LLVMCAS
+    LLVMCFIVerify
+    LLVMDebugInfoBTF
+    LLVMDebuginfod
+    LLVMDebugInfoGSYM
+    LLVMDebugInfoLogicalView
+    LLVMDebugInfoMSF
+    LLVMDebugInfoPDB
+    LLVMDiff
+    LLVMDlltoolDriver
+    LLVMDTLTO
+    LLVMDWARFCFIChecker
+    LLVMDWARFLinker
+    LLVMDWARFLinkerClassic
+    LLVMDWARFLinkerParallel
+    LLVMDWP
+    LLVMExegesis
+    LLVMExtensions
+    LLVMFileCheck
+    LLVMFrontendOpenACC
+    LLVMFuzzerCLI
+    LLVMFuzzMutate
+    LLVMInterfaceStub
+    LLVMInterpreter
+    LLVMLibDriver
+    LLVMLineEditor
+    LLVMMCA
+    LLVMMCJIT
+    LLVMMIRParser
+    LLVMObjCopy
+    LLVMOptDriver
+    LLVMOrcDebugging
+    LLVMSupportLSP
+    LLVMSymbolize
+    LLVMTableGen
+    LLVMTableGenBasic
+    LLVMTableGenCommon
+    LLVMTelemetry
+    LLVMTextAPIBinaryReader
+    LLVMWindowsManifest
+    LLVMX86AsmParser
+    LLVMX86Disassembler
+    LLVMXRay
+)
+
 # Either retrieve or build our package.
 
 if(LIBOPENCOR_PREBUILT_LLVMCLANG)
@@ -126,10 +206,6 @@ elseif(NOT ONLY_BUILD_JAVASCRIPT_THIRD_PARTY_LIBRARIES)
         set(LLVMCLANG_RELEASE_FLAGS "-Os -DNDEBUG")
     endif()
 
-    # The patches to apply to LLVM+Clang.
-
-    file(GLOB_RECURSE LLVMCLANG_PATCH_FILES "${CMAKE_CURRENT_SOURCE_DIR}/patches/*.patch")
-
     # Build LLVM+Clang.
 
     build_package(${PACKAGE_NAME}
@@ -140,7 +216,7 @@ elseif(NOT ONLY_BUILD_JAVASCRIPT_THIRD_PARTY_LIBRARIES)
             llvm
         PATCH_COMMAND
             ${CMAKE_COMMAND} -DLLVMCLANG_SOURCE_DIR=<SOURCE_DIR>
-                             -DLLVMCLANG_PATCH_FILES="${LLVMCLANG_PATCH_FILES}"
+                             -DLLVMCLANG_PATCHES_DIR=${CMAKE_CURRENT_SOURCE_DIR}/patches
                              -P ${CMAKE_CURRENT_SOURCE_DIR}/applypatches.cmake
         CMAKE_ARGS
             -DCLANG_BUILD_TOOLS=OFF
@@ -202,17 +278,35 @@ elseif(NOT ONLY_BUILD_JAVASCRIPT_THIRD_PARTY_LIBRARIES)
     )
 
     # Create our package.
-    # Note: we also package llvm-tblgen and clang-tblgen since we need them to build our JavaScript bindings.
+    # # Note: we also package llvm-tblgen and clang-tblgen since we need them to build our JavaScript bindings.
 
-    if(NOT EMSCRIPTEN)
-        set(TABLEGEN_EXES_BUILD_DIR ${CMAKE_CURRENT_BINARY_DIR}/build/LLVMClang-prefix/src/LLVMClang-build)
+    # if(NOT EMSCRIPTEN)
+    #     set(TABLEGEN_EXES_BUILD_DIR ${CMAKE_CURRENT_BINARY_DIR}/build/LLVMClang-prefix/src/LLVMClang-build)
 
-        file(GLOB TABLEGEN_EXES "${TABLEGEN_EXES_BUILD_DIR}/bin/*tblgen")
+    #     file(GLOB TABLEGEN_EXES "${TABLEGEN_EXES_BUILD_DIR}/bin/*tblgen")
 
-        foreach(TABLEGEN_EXE ${TABLEGEN_EXES})
-            file(COPY ${TABLEGEN_EXE} DESTINATION ${INSTALL_DIR}/bin)
-        endforeach()
-    endif()
+    #     foreach(TABLEGEN_EXE ${TABLEGEN_EXES})
+    #         file(COPY ${TABLEGEN_EXE} DESTINATION ${INSTALL_DIR}/bin)
+    #     endforeach()
+    # endif()
+
+    # # Remove the files that we don't need from our package.
+    # # Note: we only need llvm-tblgen and clang-tblgen (to build our JavaScript bindings), so we remove everything else
+    # #       from the bin directory (e.g. llvm-min-tblgen, which is only used to bootstrap LLVM+Clang's own build).
+    # #       (We cannot do the same for the libraries in LLVMCLANG_EXCLUDE_LIBRARIES since LLVM+Clang's installed CMake
+    # #       files reference them all, so removing them would break find_package(LLVM/Clang). They are instead excluded
+    # #       from LLVMCLANG_LIBRARIES, so that they are neither linked into libOpenCOR nor merged into its static
+    # #       version.)
+
+    # file(GLOB BIN_FILES ${INSTALL_DIR}/bin/*)
+
+    # foreach(BIN_FILE ${BIN_FILES})
+    #     get_filename_component(BIN_FILE_NAME ${BIN_FILE} NAME)
+
+    #     if(NOT BIN_FILE_NAME MATCHES "^(llvm|clang)-tblgen(\\.exe)?$")
+    #         file(REMOVE ${BIN_FILE})
+    #     endif()
+    # endforeach()
 
     create_package(${PACKAGE_NAME} ${PACKAGE_VERSION}
                    ${PACKAGE_REPOSITORY} ${RELEASE_TAG}
@@ -407,3 +501,13 @@ set(LLVMCLANG_LIBRARIES
     ${EXTRA_LLVMCLANG_LIBRARIES}
     CACHE INTERNAL "${PACKAGE_NAME}'s libraries."
 )
+
+# Remove from the list above the libraries that we don't need, then cache the resulting list, so that it can be used
+# by the rest of libOpenCOR's building system (see LLVMCLANG_EXCLUDE_LIBRARIES above).
+
+list(REMOVE_ITEM LLVMCLANG_LIBRARIES ${LLVMCLANG_EXCLUDE_LIBRARIES})
+
+set(LLVMCLANG_LIBRARIES ${LLVMCLANG_LIBRARIES} CACHE INTERNAL "${PACKAGE_NAME}'s libraries." FORCE)
+
+set(LLVMCLANG_EXCLUDE_LIBRARIES ${LLVMCLANG_EXCLUDE_LIBRARIES} CACHE INTERNAL
+    "LLVM+Clang libraries that are not needed by libOpenCOR." FORCE)
