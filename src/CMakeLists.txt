@@ -64,16 +64,31 @@ if(RELEASE_MODE AND NOT BUILDING_USING_MSVC)
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-math-errno -fno-trapping-math")
 endif()
 
-# Enable auto-vectorisation (useful for fixed-step solver loops on x86-64 release builds).
-# Note: we use -march=x86-64-v3 (AVX2) rather than -march=native so that binaries built on one x86-64 machine run on any
-#       other modern x86-64 machine. x86-64-v3 is supported by all CPUs since Intel Haswell (2013) and AMD Excavator
-#       (2015). For ARM64, the compiler defaults already include NEON/ASIMD.
+# Target x86-64-v3 (i.e. AVX2, FMA, etc.) on Intel, so that the compiler can auto-vectorise our code and that of our
+# third-party libraries (e.g., SUNDIALS' dense linear algebra, which is where most of the simulation time is spent).
+# Note #1: we use x86-64-v3 rather than the host CPU so that binaries built on one x86-64 machine run on any other
+#          modern x86-64 machine. x86-64-v3 is supported by all CPUs since Intel Haswell (2013) and AMD Excavator
+#          (2015). For ARM64, the compiler defaults already include NEON/ASIMD.
+# Note #2: MSVC only uses FMA instructions if it is allowed to contract floating-point operations, hence /fp:contract.
+# Note #3: we use those flags whatever the build type, so that our debug and release builds give the same results.
+# Note #4: the flags are also passed on to our third-party libraries (see packages.cmake and, for SUNDIALS, which uses
+#          CMAKE_C_FLAGS, src/3rdparty/SUNDIALS/CMakeLists.txt).
+# Note #5: on macOS, we may build for Intel on an ARM machine. Some third-party libraries (e.g., SUNDIALS) run checks
+#          that use CMAKE_C_FLAGS but not CMAKE_OSX_ARCHITECTURES, i.e. that compile for the host architecture, which
+#          fails with -march=x86-64-v3 on an ARM machine. So, we use -Xarch_x86_64 to only use -march=x86-64-v3 when
+#          compiling for Intel.
 
-if(RELEASE_MODE AND NOT EMSCRIPTEN AND NOT BUILDING_USING_MSVC)
-    if(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|AMD64|amd64")
-        set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -march=x86-64-v3")
-        set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -march=x86-64-v3")
+if(INTEL_MODE AND NOT EMSCRIPTEN)
+    if(BUILDING_USING_MSVC)
+        set(X86_64_V3_COMPILER_FLAGS "/arch:AVX2 /fp:contract")
+    elseif(APPLE)
+        set(X86_64_V3_COMPILER_FLAGS "-Xarch_x86_64 -march=x86-64-v3")
+    else()
+        set(X86_64_V3_COMPILER_FLAGS "-march=x86-64-v3")
     endif()
+
+    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${X86_64_V3_COMPILER_FLAGS}")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${X86_64_V3_COMPILER_FLAGS}")
 endif()
 
 # Enable link-time optimisation (LTO) for release builds to allow cross translation unit inlining and devirtualisation.
@@ -85,13 +100,9 @@ if(RELEASE_MODE AND NOT EMSCRIPTEN AND NOT LIBOPENCOR_CODE_ANALYSIS)
 endif()
 
 # Build our different third-party libraries.
-# Note: for Emscripten, we set the C/C++ flags before building our third-party libraries so that they are built with the
-#       same flags as libOpenCOR (see packages.cmake, which passes them on to each third-party library).
-
-if(EMSCRIPTEN)
-    set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -matomics -mbulk-memory -pthread -sSHARED_MEMORY=1" CACHE STRING "Emscripten C flags" FORCE)
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -matomics -mbulk-memory -pthread -sSHARED_MEMORY=1" CACHE STRING "Emscripten C++ flags" FORCE)
-endif()
+# Note: for Emscripten, our C/C++ flags are those that src/bindings/javascript/CMakeLists.txt passes on to the
+#       Emscripten build that it kicks off, so our third-party libraries are built with the same flags as libOpenCOR
+#       (see packages.cmake, which passes them on to each third-party library).
 
 add_subdirectory(3rdparty)
 
@@ -178,6 +189,7 @@ set(API_MODULE_FILE ${GIT_API_MODULE_FILE})
 set(INTERNAL_SOURCE_FILES
     ${CMAKE_CURRENT_SOURCE_DIR}/file/filemanager.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/misc/compiler.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/misc/irgenerator.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/misc/utils.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/solver/solver.cpp
     ${CMAKE_CURRENT_SOURCE_DIR}/solver/solvercvode.cpp
@@ -257,6 +269,7 @@ set(SOURCE_FILES
 set(INTERNAL_HEADER_FILES
     ${CMAKE_CURRENT_SOURCE_DIR}/misc/compiler_p.h
     ${CMAKE_CURRENT_SOURCE_DIR}/misc/compiler.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/misc/irgenerator.h
     ${CMAKE_CURRENT_SOURCE_DIR}/misc/utils.h
     ${CMAKE_CURRENT_SOURCE_DIR}/solver/solver_p.h
     ${CMAKE_CURRENT_SOURCE_DIR}/solver/solvercvode_p.h
@@ -315,11 +328,6 @@ if(EMSCRIPTEN)
                    ${SOURCE_FILES}
                    ${HEADER_FILES})
 
-    # Preserve Emscripten thread/shared-memory support for libOpenCOR.
-
-    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -sALLOW_TABLE_GROWTH -sINITIAL_TABLE=65536 -sSHARED_MEMORY=1" CACHE STRING "Emscripten exe linker flags" FORCE)
-    set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} -sSHARED_MEMORY=1" CACHE STRING "Emscripten shared linker flags" FORCE)
-
     # Set the flags for our generated .js and .wasm files.
     # Note #1: for compiling, we use -O3 to get the best performance, -matomics to enable atomic operations,
     #          -mbulk-memory to enable bulk memory operations, -pthread to enable native threading support,
@@ -355,7 +363,7 @@ if(EMSCRIPTEN)
                         -sALLOW_TABLE_GROWTH
                         -sASSERTIONS=0
                         -sEXPORT_ES6=1
-                        -sEXPORTED_FUNCTIONS=[_free,_malloc,_memset,_pow,_sqrt,_fabs,_exp,_log,_log10,_ceil,_floor,_fmin,_fmax,_fmod,_sin,_cos,_tan,_sinh,_cosh,_tanh,_asin,_acos,_atan,_asinh,_acosh,_atanh]
+                        -sEXPORTED_FUNCTIONS=[_free,_malloc,_memset,_nlaSolverAddress,_wasmNlaSolve,_pow,_sqrt,_fabs,_exp,_log,_log10,_ceil,_floor,_fmin,_fmax,_fmod,_sin,_cos,_tan,_sinh,_cosh,_tanh,_asin,_acos,_atan,_asinh,_acosh,_atanh]
                         -sEXPORTED_RUNTIME_METHODS=HEAPU8
                         -sINITIAL_MEMORY=2GB
                         -sINITIAL_TABLE=65536
@@ -469,6 +477,35 @@ else()
 
         file(GLOB_RECURSE PACKAGES ${PREBUILT_DIR}/*${CMAKE_STATIC_LIBRARY_SUFFIX})
 
+        # Only keep LLVM+Clang's libraries that we need (see LLVMCLANG_LIBRARIES in
+        # src/3rdparty/LLVMClang/CMakeLists.txt), together with our other packages' libraries.
+        # Note: we cannot remove LLVM+Clang's libraries that we don't need from the package itself since its
+        #       installed CMake files reference them all. So, we simply exclude them from the object files that
+        #       are merged into libOpenCOR's static version.
+
+        set(LLVMCLANG_ARCHIVE_NAMES)
+
+        foreach(LLVMCLANG_LIBRARY ${LLVMCLANG_LIBRARIES})
+            list(APPEND LLVMCLANG_ARCHIVE_NAMES
+                 "${CMAKE_STATIC_LIBRARY_PREFIX}${LLVMCLANG_LIBRARY}${CMAKE_STATIC_LIBRARY_SUFFIX}")
+        endforeach()
+
+        set(KEPT_PACKAGES)
+
+        foreach(PACKAGE ${PACKAGES})
+            if(PACKAGE MATCHES "/LLVMClang/lib/")
+                get_filename_component(PACKAGE_ARCHIVE_NAME ${PACKAGE} NAME)
+
+                if(NOT PACKAGE_ARCHIVE_NAME IN_LIST LLVMCLANG_ARCHIVE_NAMES)
+                    continue()
+                endif()
+            endif()
+
+            list(APPEND KEPT_PACKAGES ${PACKAGE})
+        endforeach()
+
+        set(PACKAGES ${KEPT_PACKAGES})
+
         # Extract the object files from our various packages, handling duplicate object names.
 
         list(LENGTH PACKAGES PACKAGE_COUNT)
@@ -576,6 +613,41 @@ elseif(BUILDING_USING_CLANG)
 
     if(XCODE_VERSION VERSION_LESS 15.0)
         add_linker_flags(${CMAKE_PROJECT_NAME} -Wl,-undefined,error)
+    endif()
+endif()
+
+# Only export our own symbols from our shared library and, in release mode (unless we are doing code coverage, so as not
+# to affect our code coverage reports), have the linker remove the code that we don't use and discard our local
+# symbols.
+# Note #1: our third-party libraries (e.g., LLVM+Clang) are static libraries whose symbols have default visibility.
+#          So, without this, our shared library would export all of them (e.g., ~85,000 symbols on macOS, only ~770 of
+#          which are ours), which would prevent the linker from removing any of their code that we don't use and, on
+#          Linux, would allow another copy of LLVM in the same process (e.g., one from another Python module) to
+#          interpose its symbols with ours.
+# Note #2: on macOS, there is no equivalent of --exclude-libs, so we only export the symbols that have "libOpenCOR" in
+#          their (mangled) name. This is fine since our own code is built with hidden visibility (see
+#          CXX_VISIBILITY_PRESET above), so the only symbols of ours that could be exported are those that we export on
+#          purpose, and they are all in the libOpenCOR namespace.
+# Note #3: on Windows, a DLL only exports the symbols that are explicitly marked as such and, in release mode, MSVC's
+#          linker removes unreferenced code by default, so there is nothing for us to do.
+
+if(LIBOPENCOR_SHARED_LIBS AND NOT EMSCRIPTEN)
+    if(APPLE)
+        set(EXPORTED_SYMBOLS_FILE ${CMAKE_CURRENT_BINARY_DIR}/exportedsymbols.txt)
+
+        file(WRITE ${EXPORTED_SYMBOLS_FILE} "*libOpenCOR*\n")
+
+        add_linker_flags(${CMAKE_PROJECT_NAME} -Wl,-exported_symbols_list,${EXPORTED_SYMBOLS_FILE})
+
+        if(RELEASE_MODE AND NOT LIBOPENCOR_CODE_COVERAGE)
+            add_linker_flags(${CMAKE_PROJECT_NAME} -Wl,-dead_strip -Wl,-x)
+        endif()
+    elseif(NOT WIN32)
+        add_linker_flags(${CMAKE_PROJECT_NAME} -Wl,--exclude-libs,ALL)
+
+        if(RELEASE_MODE AND NOT LIBOPENCOR_CODE_COVERAGE)
+            add_linker_flags(${CMAKE_PROJECT_NAME} -Wl,--gc-sections -Wl,-x)
+        endif()
     endif()
 endif()
 

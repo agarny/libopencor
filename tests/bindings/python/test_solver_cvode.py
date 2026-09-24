@@ -828,7 +828,7 @@ def test_solve_with_tfqmr_linear_solver_and_no_preconditioner():
     state_values = [-63.886, 0.13501, 0.98433, 0.740972]
     state_abs_tols = [0.001, 0.00001, 0.00001, 0.000001]
     rate_values = [49.719, -0.12812, -0.05099, 0.09854]
-    rate_abs_tols = [0.001, 0.00001, 0.00001, 0.00001]
+    rate_abs_tols = [0.01, 0.00001, 0.00001, 0.00001]
     constant_values = [1.0, 0.0, 0.3, 120.0, 36.0]
     constant_abs_tols = [0.0, 0.0, 0.0, 0.0, 0.0]
     computed_constant_values = [-10.613, -115.0, 12.0]

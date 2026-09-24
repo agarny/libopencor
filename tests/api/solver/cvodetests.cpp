@@ -483,7 +483,7 @@ TEST(CvodeSolverTest, solveWithTfqmrLinearSolverAndNoPreconditioner)
     static const auto STATE_VALUES {std::vector<double>({-63.886, 0.13501, 0.98433, 0.74097})};
     static const auto STATE_ABS_TOLS {std::vector<double>({0.001, 0.00001, 0.00001, 0.00001})};
     static const auto RATE_VALUES {std::vector<double>({49.719, -0.12812, -0.05099, 0.09854})};
-    static const auto RATE_ABS_TOLS {std::vector<double>({0.001, 0.00001, 0.00001, 0.00001})};
+    static const auto RATE_ABS_TOLS {std::vector<double>({0.01, 0.00001, 0.00001, 0.00001})};
     static const auto CONSTANT_VALUES {std::vector<double>({1.0, 0.0, 0.3, 120.0, 36.0})};
     static const auto CONSTANT_ABS_TOLS {std::vector<double>({0.0, 0.0, 0.0, 0.0, 0.0})};
     static const auto COMPUTED_CONSTANT_VALUES {std::vector<double>({-10.613, -115.0, 12.0})};

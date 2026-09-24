@@ -75,16 +75,6 @@ elseif(NOT ONLY_BUILD_JAVASCRIPT_THIRD_PARTY_LIBRARIES)
 
     set(PACKAGE_C_FLAGS "-DNO_FPRINTF_OUTPUT ${CMAKE_C_FLAGS}")
 
-    # Enable WebAssembly SIMD for our WASM version.
-    # Note: indeed, the compiler can auto-vectorise SUNDIALS' dense linear algebra, making it run faster. However, the
-    #       auto-vectorisation is not enabled by default for WebAssembly. We therefore need to explicitly enable
-    #       WebAssembly SIMD, which is supported by all major browsers, to get the same performance as on other
-    #       platforms.
-
-    if(EMSCRIPTEN)
-        set(PACKAGE_C_FLAGS "${PACKAGE_C_FLAGS} -msimd128")
-    endif()
-
     build_package(${PACKAGE_NAME}
         URL
             https://github.com/opencor/${PACKAGE_REPOSITORY}/archive/refs/tags/${RELEASE_TAG}.tar.gz
