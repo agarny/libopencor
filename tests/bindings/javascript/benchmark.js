@@ -106,7 +106,7 @@ function runBenchmark(name, resourcePath, odeSolver = null, numberOfSteps = 0) {
   const peakMemoryMb = peakMemoryUsage() / (BYTES_PER_KILOBYTE * BYTES_PER_KILOBYTE);
 
   console.log(
-    `${name.padEnd(16)} | ${String(steps).padStart(7)} | ${instantiateMs.toFixed(3).padStart(9)} | ${times[0].toFixed(3).padStart(8)} | ${times[Math.floor(times.length / 2)].toFixed(3).padStart(11)} | ${mean.toFixed(3).padStart(9)} | ${((mean * NANOSECONDS_PER_MILLISECOND) / steps).toFixed(1).padStart(14)} | ${peakMemoryMb.toFixed(1).padStart(9)}`
+    `${name.padEnd(16)} | ${String(steps).padStart(7)} | ${instantiateMs.toFixed(3).padStart(9)} | ${times[0].toFixed(3).padStart(9)} | ${times[Math.floor(times.length / 2)].toFixed(3).padStart(11)} | ${mean.toFixed(3).padStart(9)} | ${((mean * NANOSECONDS_PER_MILLISECOND) / steps).toFixed(1).padStart(14)} | ${peakMemoryMb.toFixed(1).padStart(9)}`
   );
 
   return true;
@@ -114,10 +114,10 @@ function runBenchmark(name, resourcePath, odeSolver = null, numberOfSteps = 0) {
 
 try {
   console.log(
-    'Benchmark        |   Steps | Inst (ms) | Min (ms) | Median (ms) | Mean (ms) | Mean (ns/step) | Peak (MB)'
+    'Benchmark        |   Steps | Inst (ms) |  Min (ms) | Median (ms) | Mean (ms) | Mean (ns/step) | Peak (MB)'
   );
   console.log(
-    '-----------------+---------+-----------+----------+-------------+-----------+----------------+----------'
+    '-----------------+---------+-----------+-----------+-------------+-----------+----------------+----------'
   );
 
   let ok = true;

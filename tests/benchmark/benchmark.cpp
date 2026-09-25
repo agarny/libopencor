@@ -122,7 +122,7 @@ bool runBenchmark(const std::string &pName, const std::string &pResourcePath, co
     const auto numberOfSteps {simulation->numberOfSteps()};
     const auto peakMemoryMb {static_cast<double>(peakMemoryUsage()) / static_cast<double>(BYTES_PER_KILOBYTE * BYTES_PER_KILOBYTE)};
 
-    std::cout << std::format("{:<16} | {:>7} | {:>9.3f} | {:>8.3f} | {:>11.3f} | {:>9.3f} | {:>14.1f} | {:>9.1f}\n",
+    std::cout << std::format("{:<16} | {:>7} | {:>9.3f} | {:>9.3f} | {:>11.3f} | {:>9.3f} | {:>14.1f} | {:>9.1f}\n",
                              pName, numberOfSteps, instantiateMs,
                              times.front(), times[times.size() / 2], mean,
                              mean * NANOSECONDS_PER_MILLISECOND / static_cast<double>(numberOfSteps), peakMemoryMb);
@@ -135,8 +135,8 @@ bool runBenchmark(const std::string &pName, const std::string &pResourcePath, co
 int main()
 {
     try {
-        std::cout << "Benchmark        |   Steps | Inst (ms) | Min (ms) | Median (ms) | Mean (ms) | Mean (ns/step) | Peak (MB)\n";
-        std::cout << "-----------------+---------+-----------+----------+-------------+-----------+----------------+----------\n";
+        std::cout << "Benchmark        |   Steps | Inst (ms) |  Min (ms) | Median (ms) | Mean (ms) | Mean (ns/step) | Peak (MB)\n";
+        std::cout << "-----------------+---------+-----------+-----------+-------------+-----------+----------------+----------\n";
 
         auto ok {true};
 

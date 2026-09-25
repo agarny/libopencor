@@ -102,7 +102,7 @@ def run_benchmark(name, resource_file, ode_solver=None, number_of_steps=0):
     peak_memory_mb = peak_memory_usage() / (BYTES_PER_KILOBYTE * BYTES_PER_KILOBYTE)
 
     print(
-        f"{name:<16s} | {steps:7d} | {instantiate_ms:9.3f} | {times[0]:8.3f} "
+        f"{name:<16s} | {steps:7d} | {instantiate_ms:9.3f} | {times[0]:9.3f} "
         f"| {times[len(times) // 2]:11.3f} | {mean:9.3f} | {mean * NANOSECONDS_PER_MILLISECOND / steps:14.1f} "
         f"| {peak_memory_mb:9.1f}"
     )
@@ -113,10 +113,10 @@ def run_benchmark(name, resource_file, ode_solver=None, number_of_steps=0):
 def main():
     try:
         print(
-            "Benchmark        |   Steps | Inst (ms) | Min (ms) | Median (ms) | Mean (ms) | Mean (ns/step) | Peak (MB)"
+            "Benchmark        |   Steps | Inst (ms) |  Min (ms) | Median (ms) | Mean (ms) | Mean (ns/step) | Peak (MB)"
         )
         print(
-            "-----------------+---------+-----------+----------+-------------+-----------+----------------+----------"
+            "-----------------+---------+-----------+-----------+-------------+-----------+----------------+----------"
         )
 
         ok = True
